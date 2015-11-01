@@ -86,7 +86,12 @@ implementation
     EthernetP.RawSocket -> SocketC;
     EthernetP.FlashAttr -> FlashAttrC;
     EthernetP.EthernetShieldConfig -> EthernetShieldConfigC;
+#endif
 
+#ifdef WITH_BERNARD
+    components BernardP;
+    BernardP.IPControl -> IPStackC;
+    BernardP.RootControl -> RPLRoutingC;
 #endif
 
     //I2C sensor rail

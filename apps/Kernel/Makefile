@@ -4,19 +4,20 @@ COMPONENT=KernelC
 
 PFLAGS += -DLONG_ADDR_SUFFIX=0x40
 #ifdef KERNEL_QUIET_MODE
-    PFLAGS += -DKERNEL_STFU
-    PFLAGS += -DBLIP_STFU
 # endif
 ifdef KERNEL_WITH_ETH_SHIELD
     PFLAGS += -DWITH_WIZ
     LINKERFILE = stormkernel_ethshield.ld
 else
-#	  PFLAGS += -DENABLE_SCRUFFLES
+#  PFLAGS += -DENABLE_SCRUFFLES
 endif
+
+#PFLAGS += -DWITH_BERNARD
+
 
 # radio options
 # CFLAGS += -DCC2420_DEF_CHANNEL=26
-CFLAGS += -DRF230_DEF_CHANNEL=26
+CFLAGS += -DRF230_DEF_CHANNEL=24
 # CFLAGS += -DCC2420_DEF_RFPOWER=4 -DENABLE_SPI0_DMA
 
 # enable dma on the radio
@@ -35,7 +36,7 @@ PFLAGS += -DIN6_PREFIX=\"2001:470:83ae:2::\"
 # Use BLIP Neighbor Discovery to autoconfigure an address
 #PFLAGS += -DBLIP_ADDR_AUTOCONF=0
 # Use RPL and prefix information in DIO messages to autoconfigure an address
-#PFLAGS += -DRPL_ADDR_AUTOCONF=0
+PFLAGS += -DRPL_ADDR_AUTOCONF=0
 
 ################################################################################
 ### Configure BLIP
@@ -77,11 +78,11 @@ PFLAGS += -DRPL_OF_MRHOF=0
 
 # If this is defined, then RPL will only send/receive from the following address. It will be added
 # as the default 802.15.4 route. If you are using a border router/root node, do not use this flag.
-PFLAGS += -DRPL_SINGLE_HOP=\"fe80::212:6d02:0:400d\"
+#PFLAGS += -DRPL_SINGLE_HOP=\"fe80::212:6d02:0:400d\"
 # if you are the root node of a single-hop network, use this flag and NOT RPL_SINGLE_HOP
 #PFLAGS += -DRPL_SINGLE_HOP_ROOT
 # if NO_RPL is defined, then *hopefully* no rpl messages should be sent, freeing up the airwaves
-PFLAGS += -DNO_RPL
+#PFLAGS += -DNO_RPL
 
 ################################################################################
 ### Configure LPL
