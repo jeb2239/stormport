@@ -10,8 +10,14 @@ module BsdTcpP {
     }
     
 } implementation {
-
+    #include <bsdtcp/tcp_var.h>
+    struct tcpcb tcbs[1];
+    
+    #include <bsdtcp/tcp_subr.c>
+    
     event void Boot.booted() {
+        tcp_init();
+        initialize_tcb(&tcbs[0]);
     }
     
     event void Timer.fired[uint8_t timer_id]() {
