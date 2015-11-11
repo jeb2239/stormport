@@ -70,6 +70,7 @@ module KernelMainP
         interface Driver as AES_Driver;
         interface Driver as Flash_Driver;
         interface Driver as Scruffles_Driver;
+        interface Driver as TCP_Driver;
         interface GeneralIO as ENSEN;
         interface HplSam4PeripheralClockCntl as ADCIFEClockCtl;
         interface NeighborDiscovery;
@@ -415,6 +416,17 @@ implementation
                     call Flash_Driver.pop_callback();
                     return TRUE;
                 }
+                
+                //check for TCP callbacks
+                cb = call TCP_Driver.peek_callback();
+                if (cb != NULL) {
+                    simple_callback_t *c = (simple_callback_t*) cb;
+                    __inject_function1((void*)c->addr, c->r);
+                    procstate = procstate_runnable;
+                    __syscall(KABI_RESUME_PROCESS);
+                    call Flash_Driver.pop_callback();
+                    return TRUE;
+                }
 
                 //if there was an event, we would process it and return, bypassing this if statement.
                 if (procstate == procstate_flush_event) { //If/when event queue is empty, flush_event becomes runnable, wait_event doesn't exit on empty queue, only on an event.
@@ -516,6 +528,7 @@ implementation
                 if (( syscall_args[0] >> 8) == 9 ) rv = call SPI_Driver.syscall_ex(syscall_args[0], syscall_args[1],syscall_args[2],syscall_args[3],&syscall_args[STACKED+0]);
                 if (( syscall_args[0] >> 8) == 10 ) rv = call Flash_Driver.syscall_ex(syscall_args[0], syscall_args[1],syscall_args[2],syscall_args[3],&syscall_args[STACKED+0]);
                 if (( syscall_args[0] >> 8) == 11 ) rv = call Scruffles_Driver.syscall_ex(syscall_args[0], syscall_args[1],syscall_args[2],syscall_args[3],&syscall_args[STACKED+0]);
+                if (( syscall_args[0] >> 8) == 12 ) rv = call TCP_Driver.syscall_ex(syscall_args[0], syscall_args[1], syscall_args[2], syscall_args[3], &syscall_args[STACKED+0]);
                 *process_syscall_rv = rv;
                 return RET_KERNEL;
             }

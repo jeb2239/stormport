@@ -124,4 +124,7 @@ implementation
     KernelMainP.Flash_Driver -> FlashDriverC;
     components ScrufflesDriverC;
     KernelMainP.Scruffles_Driver -> ScrufflesDriverC;
+    
+    components BSDTCPDriverC;
+    KernelMainP.TCP_Driver -> BSDTCPDriverC;
 }
