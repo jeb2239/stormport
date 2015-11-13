@@ -95,6 +95,16 @@ struct tcptemp {
  * Organized for 16 byte cacheline efficiency.
  */
 struct tcpcb {
+	/* Extra field that I added. */
+	int index; /* Index/ID of this TCB */
+	uint32_t activetimers;
+	
+	uint8_t sendbuf[100];
+	uint8_t recvbuf[100];
+	
+	uint16_t lport; // local port, network byte order
+	uint16_t fport; // foreign port, network byte order
+	
 #if 0
 	struct	tsegqe_head t_segq;	/* segment reassembly queue */
 	void	*t_pspare[2];		/* new reassembly queue */
@@ -233,6 +243,9 @@ struct tcpcb {
 #endif
 };
 
+/* Defined in tcp_subr.c. */
+void initialize_tcb(struct tcpcb* tp);
+
 /*
  * Flags and utility macros for the t_flags field.
  */
@@ -361,6 +374,9 @@ struct tcp_ifcap {
 	u_int	tsomaxsegcount;
 	u_int	tsomaxsegsize;
 };
+
+void	 tcp_mss_update(struct tcpcb *, int, int, struct hc_metrics_lite *,
+	    struct tcp_ifcap *);
 
 #ifndef _NETINET_IN_PCB_H_
 struct in_conninfo;

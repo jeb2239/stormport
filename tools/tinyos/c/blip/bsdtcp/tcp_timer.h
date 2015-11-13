@@ -74,6 +74,18 @@
    that it interfaces nicely with Timer<TMilli>. */
 #define hz 1000
 
+#define TT_DELACK	0x0001
+#define TT_REXMT	0x0002
+#define TT_PERSIST	0x0004
+#define TT_KEEP		0x0008
+#define TT_2MSL		0x0010
+
+// To interface with TinyOS, each timer must take up only 2 bits
+#define	TOS_REXMT	0x0
+#define	TOS_PERSIST	0x1
+#define	TOS_KEEP	0x2
+#define TOS_2MSL	0x3
+
 /*
  * Time constants.
  */
@@ -129,6 +141,9 @@ static const char *tcptimers[] =
     { "REXMT", "PERSIST", "KEEP", "2MSL", "DELACK" };
 #endif
 
+int tcp_timer_active(struct tcpcb *tp, uint32_t timer_type);
+void tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta);
+
 /*
  * Force a time value to be in a certain range.
  */
@@ -139,6 +154,14 @@ static const char *tcptimers[] =
 	if ((u_long)(tv) > (u_long)(tvmax)) \
 		(tv) = (tvmax); \
 } while(0)
+
+int	tcp_syn_backoff[TCP_MAXRXTSHIFT + 1] =
+    { 1, 1, 1, 1, 1, 2, 4, 8, 16, 32, 64, 64, 64 };
+
+int	tcp_backoff[TCP_MAXRXTSHIFT + 1] =
+    { 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 512, 512, 512 };
+
+static int tcp_totbackoff = 2559;	/* sum of tcp_backoff[] */
 
 // MOVED NECESSARY EXTERN DECLARATIONS TO TCP_SUBR.C
 #if 0 // I'M IMPLEMENTING TIMERS MY OWN WAY IN TINYOS, SO I DON'T NEED THIS

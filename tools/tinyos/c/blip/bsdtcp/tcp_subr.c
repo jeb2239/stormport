@@ -29,9 +29,12 @@
  *	@(#)tcp_subr.c	8.2 (Berkeley) 5/24/95
  */
  
- #include "tcp_var.h"
- #include "tcp_timer.h"
- #include "tcp_fsm.h"
+#include "tcp.h"
+#include "tcp_fsm.h"
+#include "tcp_var.h"
+#include "tcp_seq.h"
+#include "tcp_timer.h"
+#include "cbuf.c"
 
 /* EXTERN DECLARATIONS FROM TCP_TIMER.H */ 
 int tcp_keepinit;		/* time to establish connection */
@@ -171,10 +174,11 @@ void tcp_init(void) {
 #endif
 #endif
 }
- 
- 
+
  /* This is based on tcp_newtcb in tcp_subr.c, and tcp_usr_attach in tcp_usrreq.c. */
 void initialize_tcb(struct tcpcb* tp) {
+	int rv1, rv2;
+	
     memset(tp, 0x00, sizeof(struct tcpcb));
     // Congestion control algorithm. For now, don't include it.
     // CC_ALGO(tp) = CC_DEFAULT();
@@ -190,8 +194,81 @@ void initialize_tcb(struct tcpcb* tp) {
 	tp->t_rxtcur = TCPTV_RTOBASE;
 	tp->snd_cwnd = TCP_MAXWIN << TCP_MAX_WINSHIFT;
 	tp->snd_ssthresh = TCP_MAXWIN << TCP_MAX_WINSHIFT;
-	//tp->t_rcvtime = ticks;
+	//tp->t_rcvtime = get_time();
 	
 	/* From tcp_usr_attach in tcp_usrreq.c. */
 	tp->t_state = TCP6S_CLOSED;
- }
+	
+	rv1 = cbuf_init(tp->sendbuf, 100);
+	rv2 = cbuf_init(tp->recvbuf, 100);
+	if (rv1 != 0 || rv2 != 0) {
+		printf("Buffers too small!\n");
+	}
+}
+
+/*
+ * Fill in the IP and TCP headers for an outgoing packet, given the tcpcb.
+ * tcp_template used to store this data in mbufs, but we now recopy it out
+ * of the tcpcb each time to conserve mbufs.
+ */
+ // NOTE: HAS A DIFFERENT SIGNATURE FROM THE ORIGINAL FUNCTION IN tcp_subr.c
+void
+tcpip_fillheaders(struct tcpcb* tp, void *ip_ptr, void *tcp_ptr)
+{
+	struct tcphdr *th = (struct tcphdr *)tcp_ptr;
+
+//	INP_WLOCK_ASSERT(inp);
+
+/* I fill in the IP header elsewhere. In send_message in BsdTcpP.nc, to be exact. */
+#if 0
+#ifdef INET6
+	if ((inp->inp_vflag & INP_IPV6) != 0) {
+		struct ip6_hdr *ip6;
+
+		ip6 = (struct ip6_hdr *)ip_ptr;
+		ip6->ip6_flow = (ip6->ip6_flow & ~IPV6_FLOWINFO_MASK) |
+			(inp->inp_flow & IPV6_FLOWINFO_MASK);
+		ip6->ip6_vfc = (ip6->ip6_vfc & ~IPV6_VERSION_MASK) |
+			(IPV6_VERSION & IPV6_VERSION_MASK);
+		ip6->ip6_nxt = IPPROTO_TCP;
+		ip6->ip6_plen = htons(sizeof(struct tcphdr));
+		ip6->ip6_src = inp->in6p_laddr;
+		ip6->ip6_dst = inp->in6p_faddr;
+	}
+#endif /* INET6 */
+#if defined(INET6) && defined(INET)
+	else
+#endif
+#ifdef INET
+	{
+		struct ip *ip;
+
+		ip = (struct ip *)ip_ptr;
+		ip->ip_v = IPVERSION;
+		ip->ip_hl = 5;
+		ip->ip_tos = inp->inp_ip_tos;
+		ip->ip_len = 0;
+		ip->ip_id = 0;
+		ip->ip_off = 0;
+		ip->ip_ttl = inp->inp_ip_ttl;
+		ip->ip_sum = 0;
+		ip->ip_p = IPPROTO_TCP;
+		ip->ip_src = inp->inp_laddr;
+		ip->ip_dst = inp->inp_faddr;
+	}
+#endif /* INET */
+#endif
+	/* Fill in the TCP header */
+	//th->th_sport = inp->inp_lport;
+	//th->th_dport = inp->inp_fport;
+	th->th_sport = tp->lport;
+	th->th_dport = tp->fport;
+	th->th_seq = 0;
+	th->th_ack = 0;
+	th->th_x2 = 0;
+	th->th_off = 5;
+	th->th_flags = 0;
+	th->th_win = 0;
+	th->th_urp = 0;
+	th->th_sum = 0;		/* in_pseudo() is called later for ipv4 */
+}
