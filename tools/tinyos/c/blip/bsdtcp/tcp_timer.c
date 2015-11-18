@@ -30,6 +30,8 @@
  * $FreeBSD$
  */
 
+int	tcp_keepcnt = TCPTV_KEEPCNT;
+
 int
 tcp_timer_active(struct tcpcb *tp, uint32_t timer_type)
 {

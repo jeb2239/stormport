@@ -1,7 +1,5 @@
-#include <bsdtcp/cbuf.h>
-#include <bsdtcp/tcp_var.h>
-#include <bsdtcp/tcp_subr.c>
-#include <bsdtcp/tcp_output.c>
+#define NUMBSDTCPSOCKETS 1
+
 module BsdTcpP {
 
     provides {
@@ -14,6 +12,18 @@ module BsdTcpP {
     }
     
 } implementation {
+#include <bsdtcp/cbuf.h>
+#include <bsdtcp/tcp_var.h>
+
+    void send_message(struct ip6_packet* msg);
+    void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay);
+    
+#include <bsdtcp/tcp_subr.c>
+#include <bsdtcp/tcp_output.c>
+#include <bsdtcp/tcp_input.c>
+#include <bsdtcp/tcp_timer.c>
+#include <bsdtcp/tcp_timewait.c>
+    
     struct tcpcb tcbs[1];
     
     event void Boot.booted() {
@@ -29,6 +39,22 @@ module BsdTcpP {
     
     event void IP.recv(struct ip6_hdr* iph, void* packet, size_t len,
                        struct ip6_metadata* meta) {
+        // This is only being called if the IP address matches mine.
+        // Match this to a TCP socket
+        int i;
+        struct tcphdr* th;
+        uint16_t port;
+        struct tcpcb* tcb;
+        th = (struct tcphdr*) (iph + 1);
+        port = ntohs(th->th_dport);
+        for (i = 0; i < NUMBSDTCPSOCKETS; i++) {
+            tcb = &tcbs[i];
+            if (tcb->t_state != TCP6S_CLOSED && port == ntohs(tcb->lport)) {
+                // Matches this socket
+                // TODO check the checksum
+                tcp_input(iph, (struct tcphdr*) packet, &tcbs[i]);
+            }
+        }
     }
     
     event void IPAddress.changed(bool valid) {

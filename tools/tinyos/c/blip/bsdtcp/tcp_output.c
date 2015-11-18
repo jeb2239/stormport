@@ -41,8 +41,7 @@
 #define cc_after_idle(x)
 
 // From ip_compat.h
-#  define	bcopy(a,b,c)	memmove(b,a,c)
-
+#define	bcopy(a,b,c)	memmove(b,a,c)
 
 long min(long a, long b) {
 	if (a < b) {
@@ -123,7 +122,6 @@ tcp_output(struct tcpcb *tp)
 	int off, flags, error = 0;	/* Keep compiler happy */
 	int sendalot, mtu;
 	int sack_rxmit, sack_bytes_rxmt;
-	char* __func__ = "tcp_output";
 	unsigned ipoptlen, optlen, hdrlen;
 	int alen;
 	char* buf;
@@ -475,7 +473,7 @@ after_sack_rexmit:
 //	}
 
 //	recwin = sbspace(&so->so_rcv);
-	recwin = cbuf_size(tp->recvbuf);
+	recwin = cbuf_free_space(tp->recvbuf);
 
 	/*
 	 * Sender silly window avoidance.   We transmit under the following

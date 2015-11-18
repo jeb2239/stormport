@@ -49,6 +49,46 @@ int tcp_msl;
 //int tcp_ttl;			/* time to live for TCP segs */
 int tcp_finwait2_timeout;
  
+ /*
+ * Attempt to close a TCP control block, marking it as dropped, and freeing
+ * the socket if we hold the only reference.
+ */
+struct tcpcb *
+tcp_close(struct tcpcb *tp)
+{
+	// Seriously, it looks like this is all this function does, that I'm concerned with
+	return tp;
+#if 0
+	struct inpcb *inp = tp->t_inpcb;
+	struct socket *so;
+
+	INP_INFO_LOCK_ASSERT(&V_tcbinfo);
+	INP_WLOCK_ASSERT(inp);
+
+#ifdef TCP_OFFLOAD
+	if (tp->t_state == TCPS_LISTEN)
+		tcp_offload_listen_stop(tp);
+#endif
+	in_pcbdrop(inp);
+	TCPSTAT_INC(tcps_closed);
+	KASSERT(inp->inp_socket != NULL, ("tcp_close: inp_socket NULL"));
+	so = inp->inp_socket;
+	soisdisconnected(so);
+	if (inp->inp_flags & INP_SOCKREF) {
+		KASSERT(so->so_state & SS_PROTOREF,
+		    ("tcp_close: !SS_PROTOREF"));
+		inp->inp_flags &= ~INP_SOCKREF;
+		INP_WUNLOCK(inp);
+		ACCEPT_LOCK();
+		SOCK_LOCK(so);
+		so->so_state &= ~SS_PROTOREF;
+		sofree(so);
+		return (NULL);
+	}
+	return (tp);
+#endif
+}
+ 
 /* This is based on tcp_init in tcp_subr.c. */
 void tcp_init(void) {
 #if 0 // I'M NOT USING A HASH TABLE TO STORE TCBS. I SUPPORT SUFFICIENTLY FEW THAT A LIST IS BETTER.
@@ -175,6 +215,25 @@ void tcp_init(void) {
 #endif
 }
 
+/*
+ * A subroutine which makes it easy to track TCP state changes with DTrace.
+ * This function shouldn't be called for t_state initializations that don't
+ * correspond to actual TCP state transitions.
+ */
+void
+tcp_state_change(struct tcpcb *tp, int newstate)
+{
+#if 0
+#if defined(KDTRACE_HOOKS)
+	int pstate = tp->t_state;
+#endif
+#endif
+	tp->t_state = newstate;
+#if 0
+	TCP_PROBE6(state__change, NULL, tp, NULL, tp, NULL, pstate);
+#endif
+}
+
  /* This is based on tcp_newtcb in tcp_subr.c, and tcp_usr_attach in tcp_usrreq.c. */
 void initialize_tcb(struct tcpcb* tp) {
 	int rv1, rv2;
@@ -271,4 +330,284 @@ tcpip_fillheaders(struct tcpcb* tp, void *ip_ptr, void *tcp_ptr)
 	th->th_win = 0;
 	th->th_urp = 0;
 	th->th_sum = 0;		/* in_pseudo() is called later for ipv4 */
+}
+
+/*
+ * Send a single message to the TCP at address specified by
+ * the given TCP/IP header.  If m == NULL, then we make a copy
+ * of the tcpiphdr at th and send directly to the addressed host.
+ * This is used to force keep alive messages out using the TCP
+ * template for a connection.  If flags are given then we send
+ * a message back to the TCP which originated the segment th,
+ * and discard the mbuf containing it and any other attached mbufs.
+ *
+ * In any case the ack and sequence number of the transmitted
+ * segment are as specified by the parameters.
+ *
+ * NOTE: If m != NULL, then th must point to *inside* the mbuf.
+ */
+/* Original signature was
+void
+tcp_respond(struct tcpcb *tp, void *ipgen, struct tcphdr *th, struct mbuf *m,
+    tcp_seq ack, tcp_seq seq, int flags)
+*/
+void
+tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
+    tcp_seq ack, tcp_seq seq, int flags)
+{
+	/* Essentially all the code needs to be discarded because I need to send packets the TinyOS way.
+	   There are some parts that I copied; I didn't want to comment out everything except the few
+	   lines I needed since I felt that this would be cleaner. */
+	struct ip6_packet* msg;
+	struct ip6_hdr* ip6;
+	struct tcphdr* nth;
+	struct ip_iovec* iov;
+	int alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + sizeof(struct ip_iovec);
+	char* buf = ip_malloc(alen);
+	int win = 0;
+	if (buf == NULL) {
+		return; // drop the message
+	}
+	if (tp != NULL) {
+		if (!(flags & TH_RST)) {
+			win = cbuf_free_space(tp->recvbuf);
+			if (win > (long)TCP_MAXWIN << tp->rcv_scale)
+				win = (long)TCP_MAXWIN << tp->rcv_scale;
+		}
+	}
+	memset(buf, 0, alen); // for safe measure
+	msg = (struct ip6_packet*) buf;
+  	iov = (struct ip_iovec*) (buf + alen - sizeof(struct ip_iovec));
+  	iov->iov_next = NULL;
+	iov->iov_len = sizeof(struct tcphdr);
+	iov->iov_base = (void*) (msg + 1);
+	ip6 = &msg->ip6_hdr;
+	ip6->ip6_nxt = IANA_TCP;
+	ip6->ip6_plen = htons(sizeof(struct tcphdr));
+	ip6->ip6_src = ip6gen->ip6_dst;
+	ip6->ip6_dst = ip6gen->ip6_src;
+	nth = (struct tcphdr*) (ip6 + 1);
+	nth->th_sport = thgen->th_dport;
+	nth->th_dport = thgen->th_sport;
+	nth->th_seq = htonl(seq);
+	nth->th_ack = htonl(ack);
+	nth->th_x2 = 0;
+	nth->th_off = sizeof (struct tcphdr) >> 2;
+	nth->th_flags = flags;
+	if (tp != NULL)
+		nth->th_win = htons((u_short) (win >> tp->rcv_scale));
+	else
+		nth->th_win = htons((u_short)win);
+	nth->th_urp = 0;
+	send_message(msg);
+	ip_free(buf);
+#if 0
+	int tlen;
+	int win = 0;
+	struct ip *ip;
+	struct tcphdr *nth;
+#ifdef INET6
+	struct ip6_hdr *ip6;
+	int isipv6;
+#endif /* INET6 */
+	int ipflags = 0;
+	struct inpcb *inp;
+#if 0
+	KASSERT(tp != NULL || m != NULL, ("tcp_respond: tp and m both NULL"));
+
+#ifdef INET6
+	isipv6 = ((struct ip *)ipgen)->ip_v == (IPV6_VERSION >> 4);
+	ip6 = ipgen;
+#endif /* INET6 */
+	ip = ipgen;
+#endif
+
+	if (tp != NULL) {
+		inp = tp->t_inpcb;
+		KASSERT(inp != NULL, ("tcp control block w/o inpcb"));
+		INP_WLOCK_ASSERT(inp);
+	} else
+		inp = NULL;
+
+	if (tp != NULL) {
+		if (!(flags & TH_RST)) {
+			win = sbspace(&inp->inp_socket->so_rcv);
+			if (win > (long)TCP_MAXWIN << tp->rcv_scale)
+				win = (long)TCP_MAXWIN << tp->rcv_scale;
+		}
+	}
+	if (m == NULL) {
+		m = m_gethdr(M_NOWAIT, MT_DATA);
+		if (m == NULL)
+			return;
+		tlen = 0;
+		m->m_data += max_linkhdr;
+#ifdef INET6
+		if (isipv6) {
+			bcopy((caddr_t)ip6, mtod(m, caddr_t),
+			      sizeof(struct ip6_hdr));
+			ip6 = mtod(m, struct ip6_hdr *);
+			nth = (struct tcphdr *)(ip6 + 1);
+		} else
+#endif /* INET6 */
+		{
+			bcopy((caddr_t)ip, mtod(m, caddr_t), sizeof(struct ip));
+			ip = mtod(m, struct ip *);
+			nth = (struct tcphdr *)(ip + 1);
+		}
+		bcopy((caddr_t)th, (caddr_t)nth, sizeof(struct tcphdr));
+		flags = TH_ACK;
+	} else {
+		/*
+		 *  reuse the mbuf. 
+		 * XXX MRT We inherrit the FIB, which is lucky.
+		 */
+		m_freem(m->m_next);
+		m->m_next = NULL;
+		m->m_data = (caddr_t)ipgen;
+		/* m_len is set later */
+		tlen = 0;
+#define xchg(a,b,type) { type t; t=a; a=b; b=t; }
+#ifdef INET6
+		if (isipv6) {
+			xchg(ip6->ip6_dst, ip6->ip6_src, struct in6_addr);
+			nth = (struct tcphdr *)(ip6 + 1);
+		} else
+#endif /* INET6 */
+		{
+			xchg(ip->ip_dst.s_addr, ip->ip_src.s_addr, uint32_t);
+			nth = (struct tcphdr *)(ip + 1);
+		}
+		if (th != nth) {
+			/*
+			 * this is usually a case when an extension header
+			 * exists between the IPv6 header and the
+			 * TCP header.
+			 */
+			nth->th_sport = th->th_sport;
+			nth->th_dport = th->th_dport;
+		}
+		xchg(nth->th_dport, nth->th_sport, uint16_t);
+#undef xchg
+	}
+#ifdef INET6
+	if (isipv6) {
+		ip6->ip6_flow = 0;
+		ip6->ip6_vfc = IPV6_VERSION;
+		ip6->ip6_nxt = IPPROTO_TCP;
+		tlen += sizeof (struct ip6_hdr) + sizeof (struct tcphdr);
+		ip6->ip6_plen = htons(tlen - sizeof(*ip6));
+	}
+#endif
+#if defined(INET) && defined(INET6)
+	else
+#endif
+#ifdef INET
+	{
+		tlen += sizeof (struct tcpiphdr);
+		ip->ip_len = htons(tlen);
+		ip->ip_ttl = V_ip_defttl;
+		if (V_path_mtu_discovery)
+			ip->ip_off |= htons(IP_DF);
+	}
+#endif
+	m->m_len = tlen;
+	m->m_pkthdr.len = tlen;
+	m->m_pkthdr.rcvif = NULL;
+#ifdef MAC
+	if (inp != NULL) {
+		/*
+		 * Packet is associated with a socket, so allow the
+		 * label of the response to reflect the socket label.
+		 */
+		INP_WLOCK_ASSERT(inp);
+		mac_inpcb_create_mbuf(inp, m);
+	} else {
+		/*
+		 * Packet is not associated with a socket, so possibly
+		 * update the label in place.
+		 */
+		mac_netinet_tcp_reply(m);
+	}
+#endif
+	nth->th_seq = htonl(seq);
+	nth->th_ack = htonl(ack);
+	nth->th_x2 = 0;
+	nth->th_off = sizeof (struct tcphdr) >> 2;
+	nth->th_flags = flags;
+	if (tp != NULL)
+		nth->th_win = htons((u_short) (win >> tp->rcv_scale));
+	else
+		nth->th_win = htons((u_short)win);
+	nth->th_urp = 0;
+
+	m->m_pkthdr.csum_data = offsetof(struct tcphdr, th_sum);
+//#ifdef INET6
+//	if (isipv6) {
+		m->m_pkthdr.csum_flags = CSUM_TCP_IPV6;
+		nth->th_sum = in6_cksum_pseudo(ip6,
+		    tlen - sizeof(struct ip6_hdr), IPPROTO_TCP, 0);
+		ip6->ip6_hlim = in6_selecthlim(tp != NULL ? tp->t_inpcb :
+		    NULL, NULL);
+//	}
+//#endif /* INET6 */
+#if 0
+#if defined(INET6) && defined(INET)
+	else
+#endif
+#ifdef INET
+	{
+		m->m_pkthdr.csum_flags = CSUM_TCP;
+		nth->th_sum = in_pseudo(ip->ip_src.s_addr, ip->ip_dst.s_addr,
+		    htons((u_short)(tlen - sizeof(struct ip) + ip->ip_p)));
+	}
+#endif /* INET */
+#ifdef TCPDEBUG
+	if (tp == NULL || (inp->inp_socket->so_options & SO_DEBUG))
+		tcp_trace(TA_OUTPUT, 0, tp, mtod(m, void *), th, 0);
+#endif
+	TCP_PROBE3(debug__input, tp, th, mtod(m, const char *));
+	if (flags & TH_RST)
+		TCP_PROBE5(accept__refused, NULL, NULL, mtod(m, const char *),
+		    tp, nth);
+#endif
+//	TCP_PROBE5(send, NULL, tp, mtod(m, const char *), tp, nth);
+//#ifdef INET6
+	if (isipv6)
+		(void) ip6_output(m, NULL, NULL, ipflags, NULL, NULL, inp);
+//#endif /* INET6 */
+#if 0
+#if defined(INET) && defined(INET6)
+	else
+#endif
+#ifdef INET
+		(void) ip_output(m, NULL, NULL, ipflags, NULL, inp);
+#endif
+#endif
+#endif
+}
+
+/*
+ * Drop a TCP connection, reporting
+ * the specified error.  If connection is synchronized,
+ * then send a RST to peer.
+ */
+struct tcpcb *
+tcp_drop(struct tcpcb *tp, int errno)
+{
+//	struct socket *so = tp->t_inpcb->inp_socket;
+
+//	INP_INFO_LOCK_ASSERT(&V_tcbinfo);
+//	INP_WLOCK_ASSERT(tp->t_inpcb);
+
+	if (TCPS_HAVERCVDSYN(tp->t_state)) {
+		tcp_state_change(tp, TCPS_CLOSED);
+		(void) tcp_output(tp);
+//		TCPSTAT_INC(tcps_drops);
+	}// else
+//		TCPSTAT_INC(tcps_conndrops);
+//	if (errno == ETIMEDOUT && tp->t_softerror)
+//		errno = tp->t_softerror;
+//	so->so_error = errno;
+	return (tcp_close(tp));
 }

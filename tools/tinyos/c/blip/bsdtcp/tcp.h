@@ -33,6 +33,8 @@
 #ifndef _NETINET_TCP_H_
 #define _NETINET_TCP_H_
 
+#define __func__ "BSD TCP function"
+
 // From BsdTcpP.nc
 void send_message(struct ip6_packet* msg);
 uint32_t get_time();

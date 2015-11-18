@@ -95,7 +95,7 @@ struct tcptemp {
  * Organized for 16 byte cacheline efficiency.
  */
 struct tcpcb {
-	/* Extra field that I added. */
+	/* Extra fields that I added. */
 	int index; /* Index/ID of this TCB */
 	uint32_t activetimers;
 	
@@ -109,8 +109,9 @@ struct tcpcb {
 	struct	tsegqe_head t_segq;	/* segment reassembly queue */
 	void	*t_pspare[2];		/* new reassembly queue */
 	int	t_segqlen;		/* segment reassembly queue length */
+#endif
 	int	t_dupacks;		/* consecutive dup acks recd */
-
+#if 0
 	struct tcp_timer *t_timers;	/* All the TCP timers in one struct */
 
 	struct	inpcb *t_inpcb;		/* back pointer to internet pcb */
@@ -560,6 +561,20 @@ struct	tcpstat {
 
 	uint64_t _pad[12];		/* 6 UTO, 6 TBD */
 };
+
+/* Copied from below. */
+static inline void
+tcp_fields_to_host(struct tcphdr *th)
+{
+
+	th->th_seq = ntohl(th->th_seq);
+	th->th_ack = ntohl(th->th_ack);
+	th->th_win = ntohs(th->th_win);
+	th->th_urp = ntohs(th->th_urp);
+}
+
+void	 tcp_twstart(struct tcpcb *);
+int	 tcp_output(struct tcpcb *);
 
 #define	tcps_rcvmemdrop	tcps_rcvreassfull	/* compat */
 
