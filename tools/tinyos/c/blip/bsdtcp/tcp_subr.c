@@ -266,6 +266,26 @@ void initialize_tcb(struct tcpcb* tp) {
 }
 
 /*
+ * Create template to be used to send tcp packets on a connection.
+ * Allocates an mbuf and fills in a skeletal tcp/ip header.  The only
+ * use for this function is in keepalives, which use tcp_respond.
+ */
+ // NOTE: I CHANGED THE SIGNATURE OF THIS FUNCTION
+struct tcptemp *
+tcpip_maketemplate(struct tcpcb* tp)
+{
+	struct tcptemp *t;
+#if 0
+	t = malloc(sizeof(*t), M_TEMP, M_NOWAIT);
+#endif
+	t = ip_malloc(sizeof(struct tcptemp));
+	if (t == NULL)
+		return (NULL);
+	tcpip_fillheaders(tp, (void *)&t->tt_ipgen, (void *)&t->tt_t);
+	return (t);
+}
+
+/*
  * Fill in the IP and TCP headers for an outgoing packet, given the tcpcb.
  * tcp_template used to store this data in mbufs, but we now recopy it out
  * of the tcpcb each time to conserve mbufs.

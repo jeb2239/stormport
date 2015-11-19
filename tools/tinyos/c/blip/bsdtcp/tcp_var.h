@@ -423,6 +423,9 @@ struct tcptw {
 #define	TCP_RTTVAR_SHIFT	4	/* shift for rttvar; 2 bits */
 #define	TCP_DELTA_SHIFT		2	/* see tcp_input.c */
 
+/* My definition of the max macro */
+#define max(x, y) ((x) > (y) ? (x) : (y))
+
 /*
  * The initial retransmission should happen at rtt + 4 * rttvar.
  * Because of the way we do the smoothing, srtt and rttvar
@@ -575,6 +578,9 @@ tcp_fields_to_host(struct tcphdr *th)
 
 void	 tcp_twstart(struct tcpcb *);
 int	 tcp_output(struct tcpcb *);
+struct tcptemp *
+	 tcpip_maketemplate(struct /*inp*/tcpcb *);
+void	 tcpip_fillheaders(struct /*inp*/tcpcb *, void *, void *);
 
 #define	tcps_rcvmemdrop	tcps_rcvreassfull	/* compat */
 
