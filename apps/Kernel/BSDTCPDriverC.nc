@@ -3,7 +3,8 @@ configuration BSDTCPDriverC {
 } implementation {
     components BSDTCPDriverP, BsdTcpC;
     
-    BSDTCPDriverP.BSDTCP -> BsdTcpC.BSDTCP[0];
+    BSDTCPDriverP.BSDTCPActiveSocket -> BsdTcpC.BSDTCPActiveSocket[0];
+    BSDTCPDriverP.BSDTCPPassiveSocket -> BsdTcpC.BSDTCPPassiveSocket[0];
     
     Driver = BSDTCPDriverP;
 }

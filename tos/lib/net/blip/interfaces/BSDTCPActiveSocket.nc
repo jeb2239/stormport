@@ -1,10 +1,7 @@
-interface BSDTCP {
+interface BSDTCPActiveSocket {
     command error_t bind(uint16_t port);
     
-    command void listen();
-    
-    command error_t accept(struct sockaddr_in6* addr);
-    event void acceptDone(struct sockaddr_in6* addr);
+    command int getID();
     
     command error_t connect(struct sockaddr_in6* addr);
     event void connectDone(struct sockaddr_in6* addr);

@@ -127,6 +127,7 @@ tcp_output(struct tcpcb *tp)
 	char* buf;
 	struct ip6_packet* msg;
   	struct ip_iovec* iov;
+  	uint32_t ticks = get_ticks();
 #if 0
 #ifdef TCP_OFFLOAD
 	if (tp->t_flags & TF_TOE)
@@ -1420,7 +1421,7 @@ out:
 			 * not currently timing anything.
 			 */
 			if (tp->t_rtttime == 0) {
-				tp->t_rtttime = get_time();
+				tp->t_rtttime = ticks;
 				tp->t_rtseq = startseq;
 //				TCPSTAT_INC(tcps_segstimed);
 			}

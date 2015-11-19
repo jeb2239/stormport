@@ -3,7 +3,8 @@
 module BsdTcpP {
 
     provides {
-        interface BSDTCP[uint8_t sockid];
+        interface BSDTCPActiveSocket[uint8_t asockid];
+        interface BSDTCPPassiveSocket[uint8_t psockid];
     } uses {
         interface Boot;
         interface IP;
@@ -90,34 +91,46 @@ module BsdTcpP {
     event void IPAddress.changed(bool valid) {
     }
     
-    command error_t BSDTCP.bind[uint8_t sockid](uint16_t port) {
+    command int BSDTCPActiveSocket.getID[uint8_t asockid]() {
+        return tcbs[asockid].index;
+    }
+    
+    command error_t BSDTCPActiveSocket.bind[uint8_t sockid](uint16_t port) {
         return SUCCESS;
     }
     
-    command void BSDTCP.listen[uint8_t sockid]() {
-    }
-    
-    command error_t BSDTCP.accept[uint8_t sockid](struct sockaddr_in6* addr) {
+    command error_t BSDTCPPassiveSocket.bind[uint8_t psockid](uint16_t port) {
         return SUCCESS;
     }
     
-    command error_t BSDTCP.connect[uint8_t sockid](struct sockaddr_in6* addr) {
+    command void BSDTCPPassiveSocket.listen[uint8_t sockid]() {
+    }
+    
+    command error_t BSDTCPPassiveSocket.accept[uint8_t sockid](struct sockaddr_in6* addr, int activesockid) {
         return SUCCESS;
     }
     
-    command error_t BSDTCP.send[uint8_t sockid](uint8_t* data, uint8_t length) {
+    command error_t BSDTCPActiveSocket.connect[uint8_t sockid](struct sockaddr_in6* addr) {
         return SUCCESS;
     }
     
-    command uint8_t BSDTCP.receive[uint8_t sockid](uint8_t* buffer, uint8_t len) {
+    command error_t BSDTCPActiveSocket.send[uint8_t sockid](uint8_t* data, uint8_t length) {
+        return SUCCESS;
+    }
+    
+    command uint8_t BSDTCPActiveSocket.receive[uint8_t sockid](uint8_t* buffer, uint8_t len) {
         return 0;
     }
     
-    command error_t BSDTCP.close[uint8_t sockid]() {
+    command error_t BSDTCPActiveSocket.close[uint8_t sockid]() {
     	return SUCCESS;
     }
     
-    command error_t BSDTCP.abort[uint8_t sockid]() {
+    command error_t BSDTCPPassiveSocket.close[uint8_t sockid]() {
+        return SUCCESS;
+    }
+    
+    command error_t BSDTCPActiveSocket.abort[uint8_t sockid]() {
         return SUCCESS;
     }
 
@@ -126,22 +139,16 @@ module BsdTcpP {
         call IP.send(msg);
     }
     
-    uint32_t get_time() {
-        return call Timer.getNow[0]();
-    }
-    
     uint32_t get_ticks() {
         return ticks;
     }
     
     void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay) {
-/*
         uint8_t tcb_index = (uint8_t) tcb->index;
         uint8_t timer_index = (tcb_index << 2) & timer_id;
         if (timer_index > 0x3) {
             printf("WARNING: setting out of bounds timer!\n");
         }
         call Timer.startOneShot[timer_index](delay);
-        */
     }
 }

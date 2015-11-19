@@ -358,6 +358,7 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp)
 	uint8_t iptos = 0;
 	int drop_hdrlen;
 	int rstreason = 0;
+	uint32_t ticks = get_ticks();
 #if 0
 	struct mbuf *m = *mp;
 	struct tcphdr *th = NULL;
@@ -1311,7 +1312,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	struct in_conninfo *inc;
 	struct mbuf *mfree;
 	struct tcpopt to;
-
+	uint32_t ticks = get_ticks();
 #if 0
 #ifdef TCPDEBUG
 	/*
@@ -1368,7 +1369,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	 * XXX: This should be done after segment
 	 * validation to ignore broken/spoofed segs.
 	 */
-	//tp->t_rcvtime = ticks; FOR NOW. I'M GOING TO PUT THIS BACK IN ONCE THINGS ARE WORKING
+	tp->t_rcvtime = ticks;
 	if (TCPS_HAVEESTABLISHED(tp->t_state))
 		tcp_timer_activate(tp, TT_KEEP, TP_KEEPIDLE(tp));
 
@@ -1862,7 +1863,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			 *	SYN_SENT  --> ESTABLISHED
 			 *	SYN_SENT* --> FIN_WAIT_1
 			 */
-//			tp->t_starttime = ticks;
+			tp->t_starttime = ticks;
 			if (tp->t_flags & TF_NEEDFIN) {
 				tcp_state_change(tp, TCPS_FIN_WAIT_1);
 				tp->t_flags &= ~TF_NEEDFIN;
@@ -2240,7 +2241,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		 *      SYN-RECEIVED  -> ESTABLISHED
 		 *      SYN-RECEIVED* -> FIN-WAIT-1
 		 */
-//		tp->t_starttime = ticks;
+		tp->t_starttime = ticks;
 		if (tp->t_flags & TF_NEEDFIN) {
 			tcp_state_change(tp, TCPS_FIN_WAIT_1);
 			tp->t_flags &= ~TF_NEEDFIN;
@@ -2872,7 +2873,7 @@ dodata:							/* XXX */
 		 * enter the CLOSE_WAIT state.
 		 */
 		case TCPS_SYN_RECEIVED:
-//			tp->t_starttime = ticks;
+			tp->t_starttime = ticks;
 			/* FALLTHROUGH */
 		case TCPS_ESTABLISHED:
 			tcp_state_change(tp, TCPS_CLOSE_WAIT);
