@@ -55,9 +55,11 @@ implementation
         wdt_ctrl_t cfg, cfg2;
         last_id = 0;
         call WDTClockCtl.enable();
+        /*
         if (WDT_CTRL->bits.en)
             return SUCCESS;
-
+        */
+        
         cfg = *WDT_CTRL;
         cfg.bits.cen = 0;
         cfg.bits.key = WDT_KEY_1;
