@@ -78,14 +78,18 @@ module BsdTcpP {
         struct tcphdr* th;
         uint16_t port;
         struct tcpcb* tcb;
-        th = (struct tcphdr*) (iph + 1);
+        th = (struct tcphdr*) packet;
         port = ntohs(th->th_dport);
         for (i = 0; i < NUMBSDTCPSOCKETS; i++) {
             tcb = &tcbs[i];
             if (tcb->t_state != TCP6S_CLOSED && port == ntohs(tcb->lport)) {
                 // Matches this socket
-                // TODO check the checksum
-                tcp_input(iph, (struct tcphdr*) packet, &tcbs[i]);
+                if (get_checksum(&iph->ip6_src, &iph->ip6_dst, th, len)) {
+                    printf("Dropping packet: bad checksum\n");
+                } else {
+                    tcp_input(iph, (struct tcphdr*) packet, &tcbs[i]);
+                }
+                break;
             }
         }
     }
