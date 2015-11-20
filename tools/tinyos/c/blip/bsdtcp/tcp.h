@@ -35,10 +35,6 @@
 
 #define __func__ "BSD TCP function"
 
-// From BsdTcpP.nc
-void send_message(struct ip6_packet* msg);
-uint32_t get_time();
-
 // From ip.h:
 #define IP_MAXPACKET 65535
 

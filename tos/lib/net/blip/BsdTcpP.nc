@@ -18,7 +18,7 @@ module BsdTcpP {
 #include <bsdtcp/tcp_var.h>
 
     uint32_t get_ticks();
-    void send_message(struct ip6_packet* msg);
+    void send_message(struct tcpcb* tp, struct ip6_packet* msg, struct tcphdr* th, uint32_t tlen);
     void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay);
     
 #include <bsdtcp/tcp_subr.c>
@@ -27,6 +27,7 @@ module BsdTcpP {
 #include <bsdtcp/tcp_timer.c>
 #include <bsdtcp/tcp_timewait.c>
 #include <bsdtcp/tcp_usrreq.c>
+#include <bsdtcp/checksum.c>
     
     struct tcpcb tcbs[1];
     uint32_t ticks = 0;
@@ -138,7 +139,9 @@ module BsdTcpP {
     }
 
     /* Wrapper for underlying C code. */
-    void send_message(struct ip6_packet* msg) {
+    void send_message(struct tcpcb* tp, struct ip6_packet* msg, struct tcphdr* th, uint32_t tlen) {
+        call IPAddress.setSource(&msg->ip6_hdr);
+        th->th_sum = get_checksum(&msg->ip6_hdr.ip6_src, &tp->faddr, th, tlen);
         call IP.send(msg);
     }
     

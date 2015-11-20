@@ -1337,7 +1337,7 @@ send:
 		RO_RTFREE(&ro);
 #endif
 		// Send packet the TinyOS way
-		send_message(msg);
+		send_message(tp, msg, th, len + sizeof(struct tcp_hdr));
 		ip_free(buf);
 //	}
 //#endif /* INET6 */

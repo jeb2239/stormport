@@ -426,7 +426,7 @@ tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
 	else
 		nth->th_win = htons((u_short)win);
 	nth->th_urp = 0;
-	send_message(msg);
+	send_message(tp, msg, nth, sizeof(struct tcphdr));
 	ip_free(buf);
 #if 0
 	int tlen;
