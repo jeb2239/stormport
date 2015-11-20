@@ -48,6 +48,13 @@ int tcp_rexmit_slop;
 int tcp_msl;
 //int tcp_ttl;			/* time to live for TCP segs */
 int tcp_finwait2_timeout;
+
+// A simple linear congruential number generator
+tcp_seq seed = (tcp_seq) 0xbeaddeed; 
+tcp_seq tcp_new_isn(struct tcpcb* tp) {
+    seed = (((tcp_seq) 0xfaded011) * seed) + (tcp_seq) 0x1ead1eaf;
+    return seed;
+}
  
  /*
  * Attempt to close a TCP control block, marking it as dropped, and freeing

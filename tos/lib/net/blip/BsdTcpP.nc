@@ -26,6 +26,7 @@ module BsdTcpP {
 #include <bsdtcp/tcp_input.c>
 #include <bsdtcp/tcp_timer.c>
 #include <bsdtcp/tcp_timewait.c>
+#include <bsdtcp/tcp_usrreq.c>
     
     struct tcpcb tcbs[1];
     uint32_t ticks = 0;
@@ -72,7 +73,7 @@ module BsdTcpP {
                        struct ip6_metadata* meta) {
         // This is only being called if the IP address matches mine.
         // Match this to a TCP socket
-/*        int i;
+        int i;
         struct tcphdr* th;
         uint16_t port;
         struct tcpcb* tcb;
@@ -85,7 +86,7 @@ module BsdTcpP {
                 // TODO check the checksum
                 tcp_input(iph, (struct tcphdr*) packet, &tcbs[i]);
             }
-        }*/
+        }
     }
     
     event void IPAddress.changed(bool valid) {
@@ -95,7 +96,8 @@ module BsdTcpP {
         return tcbs[asockid].index;
     }
     
-    command error_t BSDTCPActiveSocket.bind[uint8_t sockid](uint16_t port) {
+    command error_t BSDTCPActiveSocket.bind[uint8_t asockid](uint16_t port) {
+        tcbs[asockid].fport = htons(port);
         return SUCCESS;
     }
     
@@ -103,34 +105,35 @@ module BsdTcpP {
         return SUCCESS;
     }
     
-    command void BSDTCPPassiveSocket.listen[uint8_t sockid]() {
+    command void BSDTCPPassiveSocket.listen[uint8_t psockid]() {
     }
     
-    command error_t BSDTCPPassiveSocket.accept[uint8_t sockid](struct sockaddr_in6* addr, int activesockid) {
+    command error_t BSDTCPPassiveSocket.accept[uint8_t psockid](struct sockaddr_in6* addr, int activesockid) {
         return SUCCESS;
     }
     
-    command error_t BSDTCPActiveSocket.connect[uint8_t sockid](struct sockaddr_in6* addr) {
+    command error_t BSDTCPActiveSocket.connect[uint8_t asockid](struct sockaddr_in6* addr) {
+        struct tcpcb* tp = &tcbs[asockid];
+        return tcp6_usr_connect(tp, (struct sockaddr*) addr);
+    }
+    
+    command error_t BSDTCPActiveSocket.send[uint8_t asockid](uint8_t* data, uint8_t length) {
         return SUCCESS;
     }
     
-    command error_t BSDTCPActiveSocket.send[uint8_t sockid](uint8_t* data, uint8_t length) {
-        return SUCCESS;
-    }
-    
-    command uint8_t BSDTCPActiveSocket.receive[uint8_t sockid](uint8_t* buffer, uint8_t len) {
+    command uint8_t BSDTCPActiveSocket.receive[uint8_t asockid](uint8_t* buffer, uint8_t len) {
         return 0;
     }
     
-    command error_t BSDTCPActiveSocket.close[uint8_t sockid]() {
+    command error_t BSDTCPActiveSocket.close[uint8_t asockid]() {
     	return SUCCESS;
     }
     
-    command error_t BSDTCPPassiveSocket.close[uint8_t sockid]() {
+    command error_t BSDTCPPassiveSocket.close[uint8_t psockid]() {
         return SUCCESS;
     }
     
-    command error_t BSDTCPActiveSocket.abort[uint8_t sockid]() {
+    command error_t BSDTCPActiveSocket.abort[uint8_t asockid]() {
         return SUCCESS;
     }
 

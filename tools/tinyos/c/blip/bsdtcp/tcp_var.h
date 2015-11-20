@@ -105,6 +105,8 @@ struct tcpcb {
 	uint16_t lport; // local port, network byte order
 	uint16_t fport; // foreign port, network byte order
 	
+	struct in6_addr faddr; // foreign IP address
+	
 #if 0
 	struct	tsegqe_head t_segq;	/* segment reassembly queue */
 	void	*t_pspare[2];		/* new reassembly queue */

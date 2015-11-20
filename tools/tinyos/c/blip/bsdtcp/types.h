@@ -38,6 +38,8 @@
 #ifndef _SYS_TYPES_H_
 #define	_SYS_TYPES_H_
 
+#include "_types.h"
+
 typedef uint8_t u_char;
 typedef uint16_t u_short;
 typedef uint32_t u_int;
