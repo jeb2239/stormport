@@ -124,7 +124,7 @@ tcp_output(struct tcpcb *tp)
 	int sack_rxmit, sack_bytes_rxmt;
 	unsigned ipoptlen, optlen, hdrlen;
 	int alen;
-	char* buf;
+	char* buf, * bufreal;
 	struct ip6_packet* msg;
   	struct ip_iovec* iov;
   	uint32_t ticks = get_ticks();
@@ -1004,13 +1004,16 @@ send:
 	if (optlen != 0) {
 		printf("optlen is not zero!\n");
 	}
-	alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + optlen + ipoptlen + len + sizeof(struct ip_iovec);
-	buf = ip_malloc(alen);
-	if (buf == NULL) {
+	
+	// Need to ip_malloc an extra three bytes so that we can word-align the packet
+	alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + optlen + ipoptlen + len + sizeof(struct ip_iovec) + 3;
+	bufreal = ip_malloc(alen);
+	if (bufreal == NULL) {
 		error = ENOBUFS;
 		goto out;
 	}
-	memset(buf, 0, alen); // For safe measure
+	memset(bufreal, 0, alen); // For safe measure
+	buf = (char*) (((uint32_t) (bufreal + 3)) & 0xFFFFFFFCu);
 	msg = (struct ip6_packet*) buf;
   	iov = (struct ip_iovec*) (buf + alen - sizeof(struct ip_iovec));
   	iov->iov_next = NULL;
@@ -1338,7 +1341,7 @@ send:
 #endif
 		// Send packet the TinyOS way
 		send_message(tp, msg, th, len + sizeof(struct tcp_hdr));
-		ip_free(buf);
+		ip_free(bufreal);
 //	}
 //#endif /* INET6 */
 #if 0

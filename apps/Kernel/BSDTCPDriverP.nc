@@ -24,6 +24,21 @@ module BSDTCPDriverP {
     }
     
     async command syscall_rv_t Driver.syscall_ex(uint32_t number, uint32_t arg0, uint32_t arg1, uint32_t arg2, uint32_t* argx) {
-        printf("Got syscall!\n");
+        struct sockaddr_in6 addr;
+        switch (number & 0xFF) {
+            case 0x00: // connect
+                addr.sin6_port = htons(32067);
+                inet_pton6("2001:0470:83ae:0002:0212:6d02:0000:f00b", &addr.sin6_addr);
+                call BSDTCPActiveSocket.connect(&addr);
+                break;
+            case 0x01: // bind
+                call BSDTCPActiveSocket.bind((uint16_t) arg0);
+                printf("Bound to port %d\n", arg0);
+                break;
+            default:
+                printf("Doing nothing\n");
+                break;
+        }
+        return 0;
     }
 }

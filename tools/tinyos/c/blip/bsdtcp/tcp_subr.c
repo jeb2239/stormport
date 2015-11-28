@@ -301,6 +301,7 @@ tcpip_maketemplate(struct tcpcb* tp)
 void
 tcpip_fillheaders(struct tcpcb* tp, void *ip_ptr, void *tcp_ptr)
 {
+	struct ip6_hdr* ip6 = (struct ip6_hdr*) ip_ptr;
 	struct tcphdr *th = (struct tcphdr *)tcp_ptr;
 
 //	INP_WLOCK_ASSERT(inp);
@@ -344,6 +345,9 @@ tcpip_fillheaders(struct tcpcb* tp, void *ip_ptr, void *tcp_ptr)
 	}
 #endif /* INET */
 #endif
+	/* Fill in the IP header */
+	// The source address is copied here in send_message.
+	ip6->ip6_dst = tp->faddr;
 	/* Fill in the TCP header */
 	//th->th_sport = inp->inp_lport;
 	//th->th_dport = inp->inp_fport;

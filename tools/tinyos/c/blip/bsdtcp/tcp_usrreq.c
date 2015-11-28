@@ -116,8 +116,8 @@ out:
 #endif
 
 /* Based on a function in in6_pcb.c. */
-static int in6_pcbconnect(struct tcpcb* tp, struct sockaddr* nam) {
-    register struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)nam;
+static int in6_pcbconnect(struct tcpcb* tp, struct sockaddr_in6* nam) {
+    register struct sockaddr_in6 *sin6 = nam;
     tp->faddr = sin6->sin6_addr;
 	tp->fport = sin6->sin6_port;
 	return 0;
@@ -135,7 +135,7 @@ static int
 tcp6_connect(struct tcpcb *tp, struct sockaddr *nam, struct thread *td)
 */
 static int
-tcp6_connect(struct tcpcb *tp, struct sockaddr *nam)
+tcp6_connect(struct tcpcb *tp, struct sockaddr_in6 *nam)
 {
 //	struct inpcb *inp = tp->t_inpcb;
 	int error;
@@ -143,7 +143,6 @@ tcp6_connect(struct tcpcb *tp, struct sockaddr *nam)
 	int sb_max = cbuf_free_space(tp->recvbuf); // same as sendbuf
 //	INP_WLOCK_ASSERT(inp);
 //	INP_HASH_WLOCK(&V_tcbinfo);
-
 	if (/*inp->inp_lport == 0*/tp->lport == 0) {
 		/*error = in6_pcbbind(inp, (struct sockaddr *)0, td->td_ucred);
 		if (error)
@@ -180,18 +179,18 @@ static int
 tcp6_usr_connect(struct socket *so, struct sockaddr *nam, struct thread *td)
 */
 static int
-tcp6_usr_connect(struct tcpcb* tp, struct sockaddr* nam)
+tcp6_usr_connect(struct tcpcb* tp, struct sockaddr_in6* sin6p)
 {
 	int error = 0;
 //	struct inpcb *inp;
 //	struct tcpcb *tp = NULL;
-	struct sockaddr_in6 *sin6p;
+//	struct sockaddr_in6 *sin6p;
 
 //	TCPDEBUG0;
 
-	sin6p = (struct sockaddr_in6 *)nam;
-	if (nam->sa_len != sizeof (*sin6p))
-		return (EINVAL);
+//	sin6p = (struct sockaddr_in6 *)nam;
+//	if (nam->sa_len != sizeof (*sin6p))
+//		return (EINVAL);
 	/*
 	 * Must disallow TCP ``connections'' to multicast addresses.
 	 */
@@ -220,7 +219,7 @@ tcp6_usr_connect(struct tcpcb* tp, struct sockaddr* nam)
 	 * Is this a significant problem?
 	 */
 	if (IN6_IS_ADDR_V4MAPPED(&sin6p->sin6_addr)) {
-		struct sockaddr_in sin;
+//		struct sockaddr_in sin;
 
 		if (/*(inp->inp_flags & IN6P_IPV6_V6ONLY) != 0*/1) {
 			error = EINVAL;
@@ -253,7 +252,7 @@ tcp6_usr_connect(struct tcpcb* tp, struct sockaddr* nam)
 //	inp->inp_inc.inc_flags |= INC_ISIPV6;
 //	if ((error = prison_remote_ip6(td->td_ucred, &sin6p->sin6_addr)) != 0)
 //		goto out;
-	if ((error = tcp6_connect(tp, nam/*, td*/)) != 0)
+	if ((error = tcp6_connect(tp, sin6p/*, td*/)) != 0)
 		goto out;
 #if 0
 #ifdef TCP_OFFLOAD

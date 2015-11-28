@@ -38,7 +38,7 @@
 // From ip.h:
 #define IP_MAXPACKET 65535
 
-#define KASSERT(COND, MSG) if (COND) printf MSG
+#define KASSERT(COND, MSG) if (!(COND)) printf MSG
 
 /*#include <sys/cdefs.h>
 #include <sys/types.h>*/

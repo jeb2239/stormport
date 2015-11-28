@@ -102,7 +102,7 @@ module BsdTcpP {
     }
     
     command error_t BSDTCPActiveSocket.bind[uint8_t asockid](uint16_t port) {
-        tcbs[asockid].fport = htons(port);
+        tcbs[asockid].lport = htons(port);
         return SUCCESS;
     }
     
@@ -119,7 +119,7 @@ module BsdTcpP {
     
     command error_t BSDTCPActiveSocket.connect[uint8_t asockid](struct sockaddr_in6* addr) {
         struct tcpcb* tp = &tcbs[asockid];
-        return tcp6_usr_connect(tp, (struct sockaddr*) addr);
+        return tcp6_usr_connect(tp, addr);
     }
     
     command error_t BSDTCPActiveSocket.send[uint8_t asockid](uint8_t* data, uint8_t length) {
@@ -145,7 +145,7 @@ module BsdTcpP {
     /* Wrapper for underlying C code. */
     void send_message(struct tcpcb* tp, struct ip6_packet* msg, struct tcphdr* th, uint32_t tlen) {
         call IPAddress.setSource(&msg->ip6_hdr);
-        th->th_sum = get_checksum(&msg->ip6_hdr.ip6_src, &tp->faddr, th, tlen);
+        th->th_sum = get_checksum(&msg->ip6_hdr.ip6_src, &msg->ip6_hdr.ip6_dst, th, tlen);
         call IP.send(msg);
     }
     
