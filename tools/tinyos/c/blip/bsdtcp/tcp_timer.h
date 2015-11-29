@@ -69,11 +69,6 @@
  * amount of time probing, then we drop the connection.
  */
 
-/* This is supposed to be defined in sys/kernel.h, and is supposed to be the
-   system's clock frequency. Instead, I'm going to make it milliseconds so
-   that it interfaces nicely with Timer<TMilli>. */
-#define hz 1000
-
 #define TT_DELACK	0x0001
 #define TT_REXMT	0x0002
 #define TT_PERSIST	0x0004

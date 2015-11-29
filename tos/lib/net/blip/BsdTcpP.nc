@@ -1,5 +1,8 @@
 #define NUMBSDTCPSOCKETS 1
 
+#define hz 10 // number of ticks per second
+#define MILLIS_PER_TICK 100 // number of milliseconds per tick
+
 module BsdTcpP {
 
     provides {
@@ -29,14 +32,14 @@ module BsdTcpP {
 #include <bsdtcp/tcp_usrreq.c>
 #include <bsdtcp/checksum.c>
     
-    struct tcpcb tcbs[1];
+    struct tcpcb tcbs[2];
     uint32_t ticks = 0;
     
     event void Boot.booted() {
         tcp_init();
         initialize_tcb(&tcbs[0]);
         tcbs[0].index = 0;
-        call TickTimer.startPeriodic(500);
+        call TickTimer.startPeriodic(MILLIS_PER_TICK);
     }
     
     event void TickTimer.fired() {
@@ -118,6 +121,10 @@ module BsdTcpP {
     }
     
     command error_t BSDTCPPassiveSocket.accept[uint8_t psockid](struct sockaddr_in6* addr, int activesockid) {
+        if (tcbs[psockid].state != TCP6S_CLOSED) {
+            printf("Cannot accept connection into active socket that isn't closed\n");
+            return -1;
+        }
         return SUCCESS;
     }
     
@@ -163,6 +170,6 @@ module BsdTcpP {
         if (timer_index > 0x3) {
             printf("WARNING: setting out of bounds timer!\n");
         }
-        call Timer.startOneShot[timer_index](delay);
+        call Timer.startOneShot[timer_index](delay * MILLIS_PER_TICK);
     }
 }
