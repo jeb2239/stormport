@@ -48,6 +48,7 @@ tcp_timer_keep(struct tcpcb* tp)
 {
     uint32_t ticks = get_ticks();
 	struct tcptemp *t_template;
+	tp->activetimers &= ~TT_KEEP; // for our own internal bookkeeping
 #if 0
 	struct inpcb *inp;
 	CURVNET_SET(tp->t_vnet);
@@ -159,6 +160,7 @@ void
 tcp_timer_persist(struct tcpcb* tp)
 {
     uint32_t ticks = get_ticks();
+    tp->activetimers &= ~TT_PERSIST; // mark that this timer is no longer active
 #if 0 // I already cancel if a timer was scheduled meanwhile
 	struct inpcb *inp;
 	CURVNET_SET(tp->t_vnet);
@@ -245,6 +247,7 @@ void
 tcp_timer_2msl(struct tcpcb* tp)
 {
 	uint32_t ticks = get_ticks();
+	tp->activetimers &= ~TT_2MSL; // for our own bookkeeping
 #if 0
 	struct inpcb *inp;
 	CURVNET_SET(tp->t_vnet);
@@ -337,6 +340,7 @@ tcp_timer_rexmt(struct tcpcb *tp)
 	int rexmt;
 	int headlocked;
 	uint32_t ticks = get_ticks();
+	tp->activetimers &= ~TT_REXMT; // for our own bookkeeping of active timers
 //	struct inpcb *inp;
 #if 0
 #ifdef TCPDEBUG

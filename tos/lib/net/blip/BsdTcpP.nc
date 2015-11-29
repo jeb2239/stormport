@@ -56,15 +56,19 @@ module BsdTcpP {
         
         switch(timer_id) {
         case TOS_REXMT:
+            printf("Retransmit\n");
 		    tcp_timer_rexmt(tp);
 		    break;
 	    case TOS_PERSIST:
+	        printf("Persist\n");
 	        tcp_timer_persist(tp);
 		    break;
 	    case TOS_KEEP:
+	        printf("Keep\n");
 	        tcp_timer_keep(tp);
 		    break;
 	    case TOS_2MSL:
+	        printf("2MSL\n");
 	        tcp_timer_2msl(tp);
 		    break;
         }
