@@ -111,6 +111,23 @@ struct ip6_hdr {
 #define IP6TOS_ECT		0x02	/* ECN-capable transport */
 #endif
 
+// Copied from in6.h
+#define IN6_ARE_ADDR_EQUAL(a, b)			\
+    (memcmp(&(a)->s6_addr[0], &(b)->s6_addr[0], sizeof(struct in6_addr)) == 0)
+
+/* Multicast */
+#define IN6_IS_ADDR_MULTICAST(a)	((a)->s6_addr[0] == 0xff)
+
+/*
+ * Mapped
+ */
+
+#define IN6_IS_ADDR_V4MAPPED(a)		      \
+	((a)->__u6_addr.__u6_addr32[0] == 0 &&	\
+	 (a)->__u6_addr.__u6_addr32[1] == 0 &&	\
+	 (a)->__u6_addr.__u6_addr32[2] == ntohl(0x0000ffff))
+
+
 /*
  * Extension Headers
  */

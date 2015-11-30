@@ -1,4 +1,5 @@
-#define NUMBSDTCPSOCKETS 1
+#define NUMBSDTCPACTIVESOCKETS 2
+#define NUMBSDTCPPASSIVESOCKETS 2
 
 #define hz 10 // number of ticks per second
 #define MILLIS_PER_TICK 100 // number of milliseconds per tick
@@ -32,7 +33,8 @@ module BsdTcpP {
 #include <bsdtcp/tcp_usrreq.c>
 #include <bsdtcp/checksum.c>
     
-    struct tcpcb tcbs[2];
+    struct tcpcb tcbs[NUMBSDTCPACTIVESOCKETS];
+    struct tcpcb_listen tcbls[NUMBSDTCPPASSIVESOCKETS];
     uint32_t ticks = 0;
     
     event void Boot.booted() {
@@ -83,20 +85,29 @@ module BsdTcpP {
         // Match this to a TCP socket
         int i;
         struct tcphdr* th;
-        uint16_t port;
+        uint16_t sport, dport;
         struct tcpcb* tcb;
+        struct tcpcb_listen* tcbl;
         th = (struct tcphdr*) packet;
-        port = ntohs(th->th_dport);
-        for (i = 0; i < NUMBSDTCPSOCKETS; i++) {
+        sport = th->th_sport; // network byte order
+        dport = th->th_dport; // network byte order
+        if (get_checksum(&iph->ip6_src, &iph->ip6_dst, th, len)) {
+            printf("Dropping packet: bad checksum\n");
+        }
+        for (i = 0; i < NUMBSDTCPACTIVESOCKETS; i++) {
             tcb = &tcbs[i];
-            if (tcb->t_state != TCP6S_CLOSED && port == ntohs(tcb->lport)) {
-                // Matches this socket
-                if (get_checksum(&iph->ip6_src, &iph->ip6_dst, th, len)) {
-                    printf("Dropping packet: bad checksum\n");
-                } else {
-                    tcp_input(iph, (struct tcphdr*) packet, &tcbs[i]);
-                }
-                break;
+            if (tcb->t_state != TCP6S_CLOSED && dport == tcb->lport && sport == tcb->fport && !memcmp(&iph->ip6_src, &tcb->faddr, sizeof(iph->ip6_src))) {
+                // Matches this active socket
+                tcp_input(iph, (struct tcphdr*) packet, &tcbs[i], NULL);
+                return;
+            }
+        }
+        for (i = 0; i < NUMBSDTCPPASSIVESOCKETS; i++) {
+            tcbl = &tcbls[i];
+            if (tcbl->t_state == TCP6S_LISTEN && dport == tcb->lport) {
+                // Matches this passive socket
+                tcp_input(iph, (struct tcphdr*) packet, NULL, &tcbls[i]);
+                return;
             }
         }
     }
@@ -117,11 +128,9 @@ module BsdTcpP {
         return SUCCESS;
     }
     
-    command void BSDTCPPassiveSocket.listen[uint8_t psockid]() {
-    }
-    
-    command error_t BSDTCPPassiveSocket.accept[uint8_t psockid](struct sockaddr_in6* addr, int activesockid) {
-        if (tcbs[psockid].state != TCP6S_CLOSED) {
+    command error_t BSDTCPPassiveSocket.listenaccept[uint8_t psockid](struct sockaddr_in6* addr, int activesockid) {
+        tcbls[psockid].t_state = TCP6S_LISTEN;
+        if (tcbs[activesockid].t_state != TCP6S_CLOSED) {
             printf("Cannot accept connection into active socket that isn't closed\n");
             return -1;
         }

@@ -36,24 +36,11 @@
  */
 
 #include "socket.h"
+#include "ip6.h"
 
 /* For compatibility between BSD's in6_addr struct and TinyOS's in6_addr struct. */
 #define __u6_addr in6_u
 #define __u6_addr32 u6_addr32
-
-/* Copied from in6.h */
-
-/* Multicast */
-#define IN6_IS_ADDR_MULTICAST(a)	((a)->s6_addr[0] == 0xff)
-
-/*
- * Mapped
- */
-
-#define IN6_IS_ADDR_V4MAPPED(a)		      \
-	((a)->__u6_addr.__u6_addr32[0] == 0 &&	\
-	 (a)->__u6_addr.__u6_addr32[1] == 0 &&	\
-	 (a)->__u6_addr.__u6_addr32[2] == ntohl(0x0000ffff))
 
 #if 0
 static int

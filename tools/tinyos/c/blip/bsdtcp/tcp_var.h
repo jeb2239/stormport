@@ -90,11 +90,21 @@ struct tcptemp {
 
 #define tcp6cb		tcpcb  /* for KAME src sync over BSD*'s */
 
+/* Abridged TCB for passive sockets. */
+struct tcpcb_listen {
+    int t_state;     /* Always CLOSED or LISTEN. */
+	int index;
+    uint16_t lport;
+    struct tcpcb* acceptinto;
+};
+
 /*
  * Tcp control block, one per tcp; fields:
  * Organized for 16 byte cacheline efficiency.
  */
 struct tcpcb {
+    int	t_state;		/* state of this connection */
+	
 	/* Extra fields that I added. */
 	int index; /* Index/ID of this TCB */
 	uint32_t activetimers;
@@ -118,7 +128,6 @@ struct tcpcb {
 
 	struct	inpcb *t_inpcb;		/* back pointer to internet pcb */
 #endif
-	int	t_state;		/* state of this connection */
 	u_int	t_flags;
 
 //	struct	vnet *t_vnet;		/* back pointer to parent vnet */

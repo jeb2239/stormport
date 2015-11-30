@@ -77,7 +77,7 @@
 #include "ip6.h"
 
 const int tcprexmtthresh = 3;
-
+const int V_drop_synfin = 0;
 // Copied from in.h
 #define IPPROTO_DONE 267
 
@@ -351,7 +351,7 @@ tcp_mss_update(struct tcpcb *tp, int offer, int mtuoffer,
 /* The signature of this function was originally:
    tcp_input(struct mbuf **mp, int *offp, int proto) */
 int
-tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp)
+tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb_listen* tpl)
 {
 	int tlen = 0, off;
 	int thflags;
@@ -359,6 +359,7 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp)
 	int drop_hdrlen;
 	int rstreason = 0;
 	uint32_t ticks = get_ticks();
+	KASSERT(tp || tpl, ("One of tp and tpl must be positive"));
 #if 0
 	struct mbuf *m = *mp;
 	struct tcphdr *th = NULL;
@@ -766,7 +767,7 @@ findpcb:
 	 * XXXRW: It may be time to rethink timewait locking.
 	 */
 relocked:
-	if (/*inp->inp_flags & INP_TIMEWAIT*/tp->t_state == TCP6S_TIME_WAIT) {
+	if (tp && /*inp->inp_flags & INP_TIMEWAIT*/tp->t_state == TCP6S_TIME_WAIT) {
 #if 0 // REMOVE SYNCHRONIZATION
 		if (ti_locked == TI_UNLOCKED) {
 			if (INP_INFO_TRY_RLOCK(&V_tcbinfo) == 0) {
@@ -873,47 +874,56 @@ relocked:
 	 * state) we look into the SYN cache if this is a new connection
 	 * attempt or the completion of a previous one.
 	 */
-#if 0 // FOR NOW, DON'T HANDLE LISTEN/ACCEPT. FIRST, I'LL GET DOMESTICALLY-INITIATED CONNECTIONS WORKING.
-	if (/*so->so_options & SO_ACCEPTCONN*/tp->state == TCP6S_LISTEN) {
-		struct in_conninfo inc;
 
-		KASSERT(tp->t_state == TCPS_LISTEN, ("%s: so accepting but "
-		    "tp not listening", __func__));
-		bzero(&inc, sizeof(inc));
-#ifdef INET6
-		if (isipv6) {
-			inc.inc_flags |= INC_ISIPV6;
-			inc.inc6_faddr = ip6->ip6_src;
-			inc.inc6_laddr = ip6->ip6_dst;
-		} else
-#endif
-		{
-			inc.inc_faddr = ip->ip_src;
-			inc.inc_laddr = ip->ip_dst;
-		}
-		inc.inc_fport = th->th_sport;
-		inc.inc_lport = th->th_dport;
-		inc.inc_fibnum = so->so_fibnum;
+	if (/*so->so_options & SO_ACCEPTCONN*/tp == NULL) {
+		KASSERT(tpl->t_state == TCP6S_LISTEN, ("listen socket must be in listening state!"));
+#if 0 // HANDLING OF SYN_RECEIVED HAPPENS NORMALLY, EVEN IF THIS BRANCH ISN'T TAKEN
+		//struct in_conninfo inc;
+		struct syncache_ent inc;
+
+//		KASSERT(tp->t_state == TCPS_LISTEN, ("%s: so accepting but "
+//		    "tp not listening", __func__));
+//		bzero(&inc, sizeof(inc));
+		memset(&inc, 0, sizeof(inc));
+//#ifdef INET6
+//		if (isipv6) {
+//			inc.inc_flags |= INC_ISIPV6;
+//			inc.inc6_faddr = ip6->ip6_src;
+//			inc.inc6_laddr = ip6->ip6_dst;
+			inc.faddr = ip6->ip6_src;
+			inc.laddr = ip6->ip6_dst;
+//		} else
+//#endif
+//		{
+//			inc.inc_faddr = ip->ip_src;
+//			inc.inc_laddr = ip->ip_dst;
+//		}
+//		inc.inc_fport = th->th_sport;
+//		inc.inc_lport = th->th_dport;
+//		inc.inc_fibnum = so->so_fibnum;
+		inc.fport = th->th_sport;
+		inc.lport = th->th_dport;	
 
 		/*
 		 * Check for an existing connection attempt in syncache if
 		 * the flag is only ACK.  A successful lookup creates a new
 		 * socket appended to the listen queue in SYN_RECEIVED state.
 		 */
-		if ((thflags & (TH_RST|TH_ACK|TH_SYN)) == TH_ACK) {
+		if (tp->state == TCP6S_SYN_RECEIVED && (thflags & (TH_RST|TH_ACK|TH_SYN)) == TH_ACK) {
 
-			INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
+//			INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
 			/*
 			 * Parse the TCP options here because
 			 * syncookies need access to the reflected
 			 * timestamp.
 			 */
 			tcp_dooptions(&to, optp, optlen, 0);
+#if 0
 			/*
 			 * NB: syncache_expand() doesn't unlock
 			 * inp and tcpinfo locks.
 			 */
-			if (!syncache_expand(&inc, &to, th, &so, m)) {
+			if (!syncache_expand(&inc,/* &to, */th, tp, tp->acceptinto/*m*/)) {
 				/*
 				 * No syncache entry or ACK was not
 				 * for our SYN/ACK.  Send a RST.
@@ -947,21 +957,24 @@ relocked:
 				} else
 					goto dropunlock;
 			}
+#endif
 			/*
 			 * Socket is created in state SYN_RECEIVED.
 			 * Unlock the listen socket, lock the newly
 			 * created socket and update the tp variable.
 			 */
-			INP_WUNLOCK(inp);	/* listen socket */
-			inp = sotoinpcb(so);
+//			INP_WUNLOCK(inp);	/* listen socket */
+//			inp = sotoinpcb(so);
 			/*
 			 * New connection inpcb is already locked by
 			 * syncache_expand().
 			 */
-			INP_WLOCK_ASSERT(inp);
-			tp = intotcpcb(inp);
+//			INP_WLOCK_ASSERT(inp);
+//			tp = intotcpcb(inp);
+			tp = tp->acceptinto;
 			KASSERT(tp->t_state == TCPS_SYN_RECEIVED,
 			    ("%s: ", __func__));
+#if 0
 #ifdef TCP_SIGNATURE
 			if (sig_checked == 0)  {
 				tcp_dooptions(&to, optp, optlen,
@@ -981,7 +994,7 @@ relocked:
 				sig_checked = 1;
 			}
 #endif
-
+#endif
 			/*
 			 * Process the segment and the data it
 			 * contains.  tcp_do_segment() consumes
@@ -989,7 +1002,7 @@ relocked:
 			 */
 			tcp_do_segment(m, th, so, tp, drop_hdrlen, tlen,
 			    iptos, ti_locked);
-			INP_INFO_UNLOCK_ASSERT(&V_tcbinfo);
+//			INP_INFO_UNLOCK_ASSERT(&V_tcbinfo);
 			return (IPPROTO_DONE);
 		}
 		/*
@@ -1003,30 +1016,31 @@ relocked:
 		 * causes.
 		 */
 		if (thflags & TH_RST) {
-			syncache_chkrst(&inc, th);
+		    //syncache_chkrst(&inc, th);
 			goto dropunlock;
 		}
+#endif
 		/*
 		 * We can't do anything without SYN.
 		 */
 		if ((thflags & TH_SYN) == 0) {
-			if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
-				log(LOG_DEBUG, "%s; %s: Listen socket: "
+			//if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
+				printf(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
 				    "SYN is missing, segment ignored\n",
-				    s, __func__);
-			TCPSTAT_INC(tcps_badsyn);
+				    /*s*/"note", __func__);
+//			TCPSTAT_INC(tcps_badsyn);
 			goto dropunlock;
 		}
 		/*
 		 * (SYN|ACK) is bogus on a listen socket.
 		 */
 		if (thflags & TH_ACK) {
-			if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
-				log(LOG_DEBUG, "%s; %s: Listen socket: "
+			//if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
+				printf(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
 				    "SYN|ACK invalid, segment rejected\n",
-				    s, __func__);
-			syncache_badack(&inc);	/* XXX: Not needed! */
-			TCPSTAT_INC(tcps_badsyn);
+				    /*s*/"note", __func__);
+//			syncache_badack(&inc);	/* XXX: Not needed! */
+//			TCPSTAT_INC(tcps_badsyn);
 			rstreason = BANDLIM_RST_OPENPORT;
 			goto dropwithreset;
 		}
@@ -1042,11 +1056,11 @@ relocked:
 		 * and was used by RFC1644.
 		 */
 		if ((thflags & TH_FIN) && V_drop_synfin) {
-			if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
-				log(LOG_DEBUG, "%s; %s: Listen socket: "
+			//if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
+				printf(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
 				    "SYN|FIN segment ignored (based on "
-				    "sysctl setting)\n", s, __func__);
-			TCPSTAT_INC(tcps_badsyn);
+				    "sysctl setting)\n", /*s*/"note", __func__);
+//			TCPSTAT_INC(tcps_badsyn);
 			goto dropunlock;
 		}
 		/*
@@ -1060,6 +1074,7 @@ relocked:
 		    ("%s: Listen socket: TH_RST or TH_ACK set", __func__));
 		KASSERT(thflags & (TH_SYN),
 		    ("%s: Listen socket: TH_SYN not set", __func__));
+#if 0
 #ifdef INET6
 		/*
 		 * If deprecated address is forbidden,
@@ -1110,6 +1125,7 @@ relocked:
 				ifa_free(&ia6->ia_ifa);
 		}
 #endif /* INET6 */
+#endif
 		/*
 		 * Basic sanity checks on incoming SYN requests:
 		 *   Don't respond if the destination is a link layer
@@ -1121,6 +1137,7 @@ relocked:
 		 *	link-layer packets with a broadcast IP address. Use
 		 *	in_broadcast() to find them.
 		 */
+/*
 		if (m->m_flags & (M_BCAST|M_MCAST)) {
 			if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
 			    log(LOG_DEBUG, "%s; %s: Listen socket: "
@@ -1128,26 +1145,28 @@ relocked:
 				"link layer address ignored\n", s, __func__);
 			goto dropunlock;
 		}
-#ifdef INET6
-		if (isipv6) {
+*/
+//#ifdef INET6
+//		if (isipv6) {
 			if (th->th_dport == th->th_sport &&
 			    IN6_ARE_ADDR_EQUAL(&ip6->ip6_dst, &ip6->ip6_src)) {
-				if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
-				    log(LOG_DEBUG, "%s; %s: Listen socket: "
+				//if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
+				    printf(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
 					"Connection attempt to/from self "
-					"ignored\n", s, __func__);
+					"ignored\n", /*s*/ "note", __func__);
 				goto dropunlock;
 			}
 			if (IN6_IS_ADDR_MULTICAST(&ip6->ip6_dst) ||
 			    IN6_IS_ADDR_MULTICAST(&ip6->ip6_src)) {
-				if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
-				    log(LOG_DEBUG, "%s; %s: Listen socket: "
+				//if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
+				    printf(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
 					"Connection attempt from/to multicast "
-					"address ignored\n", s, __func__);
+					"address ignored\n", /*s*/ "note", __func__);
 				goto dropunlock;
 			}
-		}
-#endif
+//		}
+//#endif
+#if 0
 #if defined(INET) && defined(INET6)
 		else
 #endif
@@ -1185,16 +1204,62 @@ relocked:
 #endif
 		TCP_PROBE3(debug__input, tp, th, mtod(m, const char *));
 		tcp_dooptions(&to, optp, optlen, TO_SYN);
-		syncache_add(&inc, &to, th, inp, &so, m, NULL, NULL);
+#endif
+		//syncache_add(&inc, &to, th, inp, &so, m, NULL, NULL);
+		// INSTEAD OF ADDING TO TO THE SYNCACHE, INITIALIZE THE NEW SOCKET RIGHT AWAY
+		// CODE IS TAKEN FROM THE syncache_socket FUNCTION
+		tp = tpl->acceptinto;
+		tcp_state_change(tp, TCPS_SYN_RECEIVED);
+		tp->iss = tcp_new_isn(tp);
+		tp->irs = th->th_seq;
+		tcp_rcvseqinit(tp);
+		tcp_sendseqinit(tp);
+		tp->snd_wl1 = th->th_seq;
+		tp->snd_max = tp->iss + 1;
+		tp->snd_nxt = tp->iss + 1;
+		tp->rcv_up = th->th_seq + 1;
+		tp->rcv_wnd = imin(imax(cbuf_free_space(tp->recvbuf), 0), TCP_MAXWIN);
+		tp->rcv_adv += tp->rcv_wnd;
+		tp->last_ack_sent = tp->rcv_nxt;
+
+//		tp->t_flags = sototcpcb(lso)->t_flags & (TF_NOPUSH|TF_NODELAY);
+//		if (sc->sc_flags & SCF_NOOPT)
+			tp->t_flags |= TF_NOOPT;
+#if 0 // Don't handle TCP options right now
+		else {
+			if (sc->sc_flags & SCF_WINSCALE) {
+				tp->t_flags |= TF_REQ_SCALE|TF_RCVD_SCALE;
+				tp->snd_scale = sc->sc_requested_s_scale;
+				tp->request_r_scale = sc->sc_requested_r_scale;
+			}
+			if (sc->sc_flags & SCF_TIMESTAMP) {
+				tp->t_flags |= TF_REQ_TSTMP|TF_RCVD_TSTMP;
+				tp->ts_recent = sc->sc_tsreflect;
+				tp->ts_recent_age = tcp_ts_getticks();
+				tp->ts_offset = sc->sc_tsoff;
+			}
+#if 0
+	#ifdef TCP_SIGNATURE
+			if (sc->sc_flags & SCF_SIGNATURE)
+				tp->t_flags |= TF_SIGNATURE;
+	#endif
+#endif
+			if (sc->sc_flags & SCF_SACK)
+				tp->t_flags |= TF_SACK_PERMIT;
+		}
+		if (sc->sc_flags & SCF_ECN)
+			tp->t_flags |= TF_ECN_PERMIT;
+#endif
 		/*
 		 * Entry added to syncache and mbuf consumed.
 		 * Only the listen socket is unlocked by syncache_add().
 		 */
-		if (ti_locked == TI_RLOCKED) {
-			INP_INFO_RUNLOCK(&V_tcbinfo);
-			ti_locked = TI_UNLOCKED;
-		}
-		INP_INFO_UNLOCK_ASSERT(&V_tcbinfo);
+//		if (ti_locked == TI_RLOCKED) {
+//			INP_INFO_RUNLOCK(&V_tcbinfo);
+//			ti_locked = TI_UNLOCKED;
+//		}
+//		INP_INFO_UNLOCK_ASSERT(&V_tcbinfo);
+		tcp_timer_activate(tp, TT_REXMT, 0); // to send the SYN-ACK
 		return (IPPROTO_DONE);
 	} else if (tp->t_state == TCPS_LISTEN) {
 		/*
@@ -1206,7 +1271,9 @@ relocked:
 		 */
 		goto dropunlock;
 	}
-#endif
+	
+	KASSERT(tp, ("tp is still NULL!"));
+
 #if 0 // DON'T DO TCP SIGNATURE
 #ifdef TCP_SIGNATURE
 	if (sig_checked == 0)  {
@@ -1257,7 +1324,9 @@ dropwithreset:
 #endif
 #endif
 //	if (inp != NULL) {
+    if (tp) {
 		tcp_dropwithreset(ip6, th, tp, tlen, rstreason);
+	}
 //		INP_WUNLOCK(inp);
 //	} else
 //		tcp_dropwithreset(ip6, th, NULL, tlen, rstreason);
