@@ -293,7 +293,7 @@ after_sack_rexmit:
 	if (sack_rxmit == 0) {
 		if (sack_bytes_rxmt == 0)
 //			len = ((long)ulmin(sbavail(&so->so_snd), sendwin) -
-			len = ((long) ulmin(cbuf_free_space(tp->sendbuf), sendwin) -
+			len = ((long) ulmin(cbuf_used_space(tp->sendbuf), sendwin) -
 			    off);
 #if 0
 		else {
@@ -366,7 +366,7 @@ after_sack_rexmit:
 		 */
 		len = 0;
 		if ((sendwin == 0) && (TCPS_HAVEESTABLISHED(tp->t_state)) &&
-			(off < (int) /*sbavail(&so->so_snd)*/cbuf_free_space(tp->sendbuf))) {
+			(off < (int) /*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf))) {
 			printf("Retransmit delay 0: 370\n");
 			tcp_timer_activate(tp, TT_REXMT, 0);
 			tp->t_rxtshift = 0;
@@ -502,7 +502,7 @@ after_sack_rexmit:
 		if (!(tp->t_flags & TF_MORETOCOME) &&	/* normal case */
 		    (idle || (tp->t_flags & TF_NODELAY)) &&
 //		    len + off >= sbavail(&so->so_snd) &&
-			len + off >= cbuf_free_space(tp->sendbuf) &&
+			len + off >= cbuf_used_space(tp->sendbuf) &&
 		    (tp->t_flags & TF_NOPUSH) == 0) {
 			goto send;
 		}
@@ -632,7 +632,7 @@ dontupdate:
 	 * if window is nonzero, transmit what we can,
 	 * otherwise force out a byte.
 	 */
-	if (/*sbavail(&so->so_snd)*/cbuf_free_space(tp->sendbuf) && !tcp_timer_active(tp, TT_REXMT) &&
+	if (/*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf) && !tcp_timer_active(tp, TT_REXMT) &&
 	    !tcp_timer_active(tp, TT_PERSIST)) {
 		tp->t_rxtshift = 0;
 		tcp_setpersist(tp);
@@ -1007,14 +1007,14 @@ send:
 	}
 	
 	// Need to ip_malloc an extra three bytes so that we can word-align the packet
-	alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + optlen + ipoptlen + len + sizeof(struct ip_iovec) + 3;
-	bufreal = ip_malloc(alen);
+	alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + optlen + ipoptlen + len + sizeof(struct ip_iovec);
+	bufreal = ip_malloc(alen + 3);
 	if (bufreal == NULL) {
 		error = ENOBUFS;
 		goto out;
 	}
-	memset(bufreal, 0, alen); // For safe measure
 	buf = (char*) (((uint32_t) (bufreal + 3)) & 0xFFFFFFFCu);
+	memset(buf, 0, alen); // For safe measure
 	msg = (struct ip6_packet*) buf;
   	iov = (struct ip_iovec*) (buf + alen - sizeof(struct ip_iovec));
   	iov->iov_next = NULL;
@@ -1450,7 +1450,7 @@ timer:
 			}
 			printf("Retransmit timer 1450\n");
 			tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
-		} else if (len == 0 && /*sbavail(&so->so_snd)*/cbuf_free_space(tp->sendbuf) &&
+		} else if (len == 0 && /*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf) &&
 		    !tcp_timer_active(tp, TT_REXMT) &&
 		    !tcp_timer_active(tp, TT_PERSIST)) {
 			/*

@@ -36,7 +36,6 @@ module IPProtocolsP {
     // Check whether the packet has a fragment extension header indicating
     // actual fragmentation. If so, discard --- we don't handle fragmentation,
     // and delivering fragments as complete packets is not really a good idea...
-    printf("Got something up here!\n");
     nxt_hdr = IPV6_FRAG;
     payload_off = call IPPacket.findHeader(&v, iph->ip6_nxt, &nxt_hdr);
     if (payload_off>=0 && ((uint16_t*)((uint8_t*)payload+payload_off))[1]!=0)
@@ -51,6 +50,8 @@ module IPProtocolsP {
     if (payload_off >= 0) {
       signal IP.recv[nxt_hdr](iph, ((uint8_t *)payload) + payload_off,
                               len - payload_off, meta);
+    } else {
+      printf("Discarding the packet!\n");
     }
   }
 

@@ -1694,14 +1694,13 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				TCP_PROBE3(debug__input, tp, th,
 					mtod(m, const char *));
 #endif
-				if (tp->snd_una == tp->snd_max) {
-				    printf("Retranmitting delay 0: input 1696\n");
-					tcp_timer_activate(tp, TT_REXMT, 0); }
+				if (tp->snd_una == tp->snd_max)
+					tcp_timer_activate(tp, TT_REXMT, 0);
 				else if (!tcp_timer_active(tp, TT_PERSIST))
 					tcp_timer_activate(tp, TT_REXMT,
 						      tp->t_rxtcur);
 //				sowwakeup(so);
-				if (cbuf_free_space(tp->sendbuf))
+				if (cbuf_used_space(tp->sendbuf))
 //				if (sbavail(&so->so_snd))
 					(void) tcp_output(tp);
 				goto check_delack;
@@ -1858,6 +1857,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	/*
 	 * If the state is SYN_RECEIVED:
 	 *	if seg contains an ACK, but not for our SYN/ACK, send a RST.
+	 *  (Added by Sam) if seg is resending the original SYN, resend the SYN/ACK
 	 */
 	case TCPS_SYN_RECEIVED:
 		if ((thflags & TH_ACK) &&
@@ -1865,6 +1865,9 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		     SEQ_GT(th->th_ack, tp->snd_max))) {
 				rstreason = BANDLIM_RST_OPENPORT;
 				goto dropwithreset;
+		} else if ((thflags & TH_SYN) && (th->th_seq == tp->irs)) { // this clause was added by Sam
+		    tp->snd_nxt = tp->snd_una;
+		    tcp_output(tp);
 		}
 		break;
 
@@ -1966,7 +1969,6 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			 *        SYN-SENT* -> SYN-RECEIVED*
 			 */
 			tp->t_flags |= (TF_ACKNOW | TF_NEEDSYN);
-			printf("Retransmitting delay 0: 1964\n");
 			tcp_timer_activate(tp, TT_REXMT, 0);
 			tcp_state_change(tp, TCPS_SYN_RECEIVED);
 		}
@@ -2089,8 +2091,9 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	/*
 	 * RFC5961 Section 4.2
 	 * Send challenge ACK for any SYN in synchronized state.
+	 * (Added by Sam) Don't send if in SYN-RECEIVED
 	 */
-	if ((thflags & TH_SYN) && tp->t_state != TCPS_SYN_SENT) {
+	if ((thflags & TH_SYN) && tp->t_state != TCPS_SYN_SENT && tp->t_state != TCP6S_SYN_RECEIVED) {
 /*		KASSERT(ti_locked == TI_RLOCKED,
 		    ("tcp_do_segment: TH_SYN ti_locked %d", ti_locked));
 		INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
@@ -2104,6 +2107,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			rstreason = BANDLIM_UNLIMITED;
 		} else {*/
 			/* Send challenge ACK. */
+			printf("Sending challenge ACK\n");
 			tcp_respond(tp, ip6, th, tp->rcv_nxt, tp->snd_nxt, TH_ACK);
 			tp->last_ack_sent = tp->rcv_nxt;
 //			m = NULL;
@@ -2329,6 +2333,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			tcp_state_change(tp, TCPS_FIN_WAIT_1);
 			tp->t_flags &= ~TF_NEEDFIN;
 		} else {
+		    printf("SYN_RECEIVED --> ESTABLISHED\n");
 			tcp_state_change(tp, TCPS_ESTABLISHED);
 //			TCP_PROBE5(accept__established, NULL, tp,
 //			    mtod(m, const char *), tp, th);
@@ -2471,7 +2476,6 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 					/* Congestion signal before ack. */
 //					cc_cong_signal(tp, th, CC_NDUPACK);
 //					cc_ack_received(tp, th, CC_DUPACK);
-					printf("Retransmitting delay 0: input 2467\n");
 					tcp_timer_activate(tp, TT_REXMT, 0);
 					tp->t_rtttime = 0;
 #if 0
@@ -2531,7 +2535,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 //					SOCKBUF_LOCK(&so->so_snd);
 //					avail = sbavail(&so->so_snd) -
 //					    (tp->snd_nxt - tp->snd_una);
-					avail = cbuf_free_space(tp->sendbuf) - (tp->snd_nxt - tp->snd_una);
+					avail = cbuf_used_space(tp->sendbuf) - (tp->snd_nxt - tp->snd_una);
 //					SOCKBUF_UNLOCK(&so->so_snd);
 					if (avail > 0)
 						(void) tcp_output(tp);
@@ -2650,7 +2654,6 @@ process_ACK:
 		 * timer, using current (possibly backed-off) value.
 		 */
 		if (th->th_ack == tp->snd_max) {
-		    printf("Retransmitting 0: tcp_input 2644\n");
 			tcp_timer_activate(tp, TT_REXMT, 0);
 			needoutput = 1;
 		} else if (!tcp_timer_active(tp, TT_PERSIST))
@@ -2671,9 +2674,9 @@ process_ACK:
 //		cc_ack_received(tp, th, CC_ACK);
 
 //		SOCKBUF_LOCK(&so->so_snd);
-		if (acked > /*sbavail(&so->so_snd)*/cbuf_free_space(tp->sendbuf)) {
+		if (acked > /*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf)) {
 			//tp->snd_wnd -= sbavail(&so->so_snd);
-			tp->snd_wnd -= cbuf_free_space(tp->sendbuf);
+			tp->snd_wnd -= cbuf_used_space(tp->sendbuf);
 //			mfree = sbcut_locked(&so->so_snd,
 //			    (int)sbavail(&so->so_snd));
 			ourfinisacked = 1;

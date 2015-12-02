@@ -396,8 +396,8 @@ tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
 	struct ip6_hdr* ip6;
 	struct tcphdr* nth;
 	struct ip_iovec* iov;
-	int alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + sizeof(struct ip_iovec) + 3;
-	char* bufreal = ip_malloc(alen);
+	int alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + sizeof(struct ip_iovec);
+	char* bufreal = ip_malloc(alen + 3);
 	int win = 0;
 	char* buf;
 	if (bufreal == NULL) {
@@ -410,13 +410,14 @@ tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
 				win = (long)TCP_MAXWIN << tp->rcv_scale;
 		}
 	}
-	memset(bufreal, 0, alen); // for safe measure
 	buf = (char*) (((uint32_t) (bufreal + 3)) & 0xFFFFFFFCu);
+	memset(buf, 0, alen); // for safe measure
 	msg = (struct ip6_packet*) buf;
   	iov = (struct ip_iovec*) (buf + alen - sizeof(struct ip_iovec));
   	iov->iov_next = NULL;
 	iov->iov_len = sizeof(struct tcphdr);
 	iov->iov_base = (void*) (msg + 1);
+	msg->ip6_data = iov;
 	ip6 = &msg->ip6_hdr;
 	ip6->ip6_nxt = IANA_TCP;
 	ip6->ip6_plen = htons(sizeof(struct tcphdr));

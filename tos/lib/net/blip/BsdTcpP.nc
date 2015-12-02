@@ -93,7 +93,7 @@ module BsdTcpP {
         th = (struct tcphdr*) packet;
         sport = th->th_sport; // network byte order
         dport = th->th_dport; // network byte order
-        printf("Got a packet!\n");
+        printf("Got a packet! SYN = %d, ACK = %d\n", th->th_flags & TH_SYN, th->th_flags & TH_ACK);
         if (get_checksum(&iph->ip6_src, &iph->ip6_dst, th, len)) {
             printf("Dropping packet: bad checksum\n");
             return;
@@ -174,12 +174,13 @@ module BsdTcpP {
     /* Wrapper for underlying C code. */
     void send_message(struct tcpcb* tp, struct ip6_packet* msg, struct tcphdr* th, uint32_t tlen) {
         char destaddr[100];
+        msg->ip6_hdr.ip6_vfc = IPV6_VERSION;
         call IPAddress.setSource(&msg->ip6_hdr);
         th->th_sum = 0; // should be zero already, but just in case
         th->th_sum = get_checksum(&msg->ip6_hdr.ip6_src, &msg->ip6_hdr.ip6_dst, th, tlen);
         inet_ntop6(&msg->ip6_hdr.ip6_dst, destaddr, 100);
         printf("Sending message to %s\n", destaddr);
-        call IP.send(msg);
+        printf("Return value: %d\n", call IP.send(msg));
     }
     
     uint32_t get_ticks() {
@@ -193,7 +194,7 @@ module BsdTcpP {
             printf("WARNING: setting out of bounds timer!\n");
         }
         printf("Setting timer %d, delay is %d\n", timer_index, delay * MILLIS_PER_TICK);
-        call Timer.startOneShot[timer_index](delay * MILLIS_PER_TICK + 10);
+        call Timer.startOneShot[timer_index](delay * MILLIS_PER_TICK);
     }
     
     void stop_timer(struct tcpcb* tcb, uint8_t timer_id) {
