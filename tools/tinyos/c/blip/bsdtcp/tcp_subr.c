@@ -270,6 +270,9 @@ void initialize_tcb(struct tcpcb* tp) {
 	if (rv1 != 0 || rv2 != 0) {
 		printf("Buffers too small!\n");
 	}
+	
+	tp->t_maxopd = 1280; // don't change dynamically. These are conservative estimates.
+	tp->t_maxseg = 1200;
 }
 
 /*
@@ -393,10 +396,11 @@ tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
 	struct ip6_hdr* ip6;
 	struct tcphdr* nth;
 	struct ip_iovec* iov;
-	int alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + sizeof(struct ip_iovec);
-	char* buf = ip_malloc(alen);
+	int alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + sizeof(struct ip_iovec) + 3;
+	char* bufreal = ip_malloc(alen);
 	int win = 0;
-	if (buf == NULL) {
+	char* buf;
+	if (bufreal == NULL) {
 		return; // drop the message
 	}
 	if (tp != NULL) {
@@ -406,7 +410,8 @@ tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
 				win = (long)TCP_MAXWIN << tp->rcv_scale;
 		}
 	}
-	memset(buf, 0, alen); // for safe measure
+	memset(bufreal, 0, alen); // for safe measure
+	buf = (char*) (((uint32_t) (bufreal + 3)) & 0xFFFFFFFCu);
 	msg = (struct ip6_packet*) buf;
   	iov = (struct ip_iovec*) (buf + alen - sizeof(struct ip_iovec));
   	iov->iov_next = NULL;
@@ -431,7 +436,7 @@ tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
 		nth->th_win = htons((u_short)win);
 	nth->th_urp = 0;
 	send_message(tp, msg, nth, sizeof(struct tcphdr));
-	ip_free(buf);
+	ip_free(bufreal);
 #if 0
 	int tlen;
 	int win = 0;

@@ -3,6 +3,10 @@
  */
 #include "tcp.h"
 
+inline uint16_t deref_safe(uint16_t* unaligned) {
+    return ((uint16_t) *((uint8_t*) unaligned)) | (((uint16_t) *(((uint8_t*) unaligned) + 1)) << 8);
+}
+
 uint16_t get_checksum(struct in6_addr* src, struct in6_addr* dest,
                       struct tcphdr* tcpseg, uint32_t len) {
     uint32_t total;
@@ -16,16 +20,15 @@ uint16_t get_checksum(struct in6_addr* src, struct in6_addr* dest,
         uint8_t reserved1;
         uint8_t reserved2;
         uint8_t protocol;
-    } __attribute__((packed)) pseudoheader;
-    pseudoheader.srcaddr = *src;
-    pseudoheader.destaddr = *dest;
+    } __attribute__((packed, aligned)) pseudoheader;
+    memcpy(&pseudoheader.srcaddr, src, sizeof(struct in6_addr));
+    memcpy(&pseudoheader.destaddr, dest, sizeof(struct in6_addr));
     pseudoheader.reserved0 = 0;
     pseudoheader.reserved1 = 0;
     pseudoheader.reserved2 = 0;
     pseudoheader.protocol = 6; // TCP
     pseudoheader.tcplen = (uint32_t) htonl(len);
     
-    tcpseg->th_sum = 0;
     total = 0;
     for (current = (uint16_t*) &pseudoheader;
          current < (uint16_t*) (&pseudoheader + 1); current++) {
@@ -41,8 +44,9 @@ uint16_t get_checksum(struct in6_addr* src, struct in6_addr* dest,
     }
     
     for (current = (uint16_t*) tcpseg;
-         current < end; current++) {
-        total += (uint32_t) *current;
+        current < end; current++) {
+        // read the memory byte by byte, in case tcpseg isn't word-aligned 
+        total += deref_safe(current);
     }
     
     while (total >> 16) {

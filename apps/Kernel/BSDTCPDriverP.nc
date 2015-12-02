@@ -32,8 +32,17 @@ module BSDTCPDriverP {
                 call BSDTCPActiveSocket.connect(&addr);
                 break;
             case 0x01: // bind
-                call BSDTCPActiveSocket.bind((uint16_t) arg0);
-                printf("Bound to port %d\n", arg0);
+                if (arg0 & 1) {
+                    call BSDTCPPassiveSocket.bind((uint16_t) arg0);
+                    printf("Bound passive socket to port %d\n", arg0);
+                } else {
+                    call BSDTCPActiveSocket.bind((uint16_t) arg0);
+                    printf("Bound active socket to port %d\n", arg0);
+                }
+                break;
+            case 0x02: // listenaccept
+                call BSDTCPPassiveSocket.listenaccept(0);
+                printf("Accepting into socket 0\n");
                 break;
             default:
                 printf("Doing nothing\n");

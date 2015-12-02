@@ -607,7 +607,6 @@ tcp_timer_active(struct tcpcb *tp, uint32_t timer_type)
 void
 tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta) {
 	uint8_t tos_timer;
-	tp->activetimers |= timer_type;
 	switch (timer_type) {
 	case TT_REXMT:
 		tos_timer = TOS_REXMT;
@@ -624,7 +623,13 @@ tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta) {
 	default:
 		printf("Invalid timer 0x%x: skipping\n", timer_type);
 		return;
-    }
-    set_timer(tp, timer_type, (uint32_t) delta);
+	}
+	if (delta) {
+		tp->activetimers |= timer_type;
+		set_timer(tp, tos_timer, (uint32_t) delta);
+	} else {
+		tp->activetimers &= ~timer_type;
+		stop_timer(tp, tos_timer);
+	}
 }
 

@@ -367,6 +367,7 @@ after_sack_rexmit:
 		len = 0;
 		if ((sendwin == 0) && (TCPS_HAVEESTABLISHED(tp->t_state)) &&
 			(off < (int) /*sbavail(&so->so_snd)*/cbuf_free_space(tp->sendbuf))) {
+			printf("Retransmit delay 0: 370\n");
 			tcp_timer_activate(tp, TT_REXMT, 0);
 			tp->t_rxtshift = 0;
 			tp->snd_nxt = tp->snd_una;
@@ -1125,6 +1126,7 @@ send:
 			th->th_seq = htonl(tp->snd_nxt);
 		else
 			th->th_seq = htonl(tp->snd_max);
+	printf("Sequence number is %d\n", ntohl(th->th_seq));
 #if 0
 	} else {
 		th->th_seq = htonl(p->rxmit);
@@ -1446,6 +1448,7 @@ timer:
 				tcp_timer_activate(tp, TT_PERSIST, 0);
 				tp->t_rxtshift = 0;
 			}
+			printf("Retransmit timer 1450\n");
 			tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
 		} else if (len == 0 && /*sbavail(&so->so_snd)*/cbuf_free_space(tp->sendbuf) &&
 		    !tcp_timer_active(tp, TT_REXMT) &&
@@ -1524,8 +1527,9 @@ timer:
 			return (error);
 		case ENOBUFS:
 	                if (!tcp_timer_active(tp, TT_REXMT) &&
-			    !tcp_timer_active(tp, TT_PERSIST))
-	                        tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
+			    !tcp_timer_active(tp, TT_PERSIST)) {
+			                printf("Retransmit timer: 1530\n");
+	                        tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);}
 			tp->snd_cwnd = tp->t_maxseg;
 			return (0);
 		case EMSGSIZE:

@@ -1210,17 +1210,21 @@ relocked:
 		// CODE IS TAKEN FROM THE syncache_socket FUNCTION
 		tp = tpl->acceptinto;
 		tcp_state_change(tp, TCPS_SYN_RECEIVED);
+		tp->t_flags |= TF_ACKNOW; // my addition
 		tp->iss = tcp_new_isn(tp);
 		tp->irs = th->th_seq;
 		tcp_rcvseqinit(tp);
 		tcp_sendseqinit(tp);
 		tp->snd_wl1 = th->th_seq;
-		tp->snd_max = tp->iss + 1;
-		tp->snd_nxt = tp->iss + 1;
+		tp->snd_max = tp->iss/* + 1*/;
+		tp->snd_nxt = tp->iss/* + 1*/;
 		tp->rcv_up = th->th_seq + 1;
 		tp->rcv_wnd = imin(imax(cbuf_free_space(tp->recvbuf), 0), TCP_MAXWIN);
 		tp->rcv_adv += tp->rcv_wnd;
 		tp->last_ack_sent = tp->rcv_nxt;
+		memcpy(&tp->faddr, &ip6->ip6_src, sizeof(tp->faddr));
+		tp->fport = th->th_sport;
+		tp->lport = tpl->lport;
 
 //		tp->t_flags = sototcpcb(lso)->t_flags & (TF_NOPUSH|TF_NODELAY);
 //		if (sc->sc_flags & SCF_NOOPT)
@@ -1259,7 +1263,8 @@ relocked:
 //			ti_locked = TI_UNLOCKED;
 //		}
 //		INP_INFO_UNLOCK_ASSERT(&V_tcbinfo);
-		tcp_timer_activate(tp, TT_REXMT, 0); // to send the SYN-ACK
+        printf("Sending SYN-ACK\n");
+		tcp_output(tp); // to send the SYN-ACK
 		return (IPPROTO_DONE);
 	} else if (tp->t_state == TCPS_LISTEN) {
 		/*
@@ -1523,18 +1528,20 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	 * or <SYN,ACK>) segment itself is never scaled.
 	 * XXX this is traditional behavior, may need to be cleaned up.
 	 */
-#if 0 // DON'T PROCESS OPTIONS YET
 	if (tp->t_state == TCPS_SYN_SENT && (thflags & TH_SYN)) {
+#if 0 // DON'T PROCESS OPTIONS YET
 		if ((to.to_flags & TOF_SCALE) &&
 		    (tp->t_flags & TF_REQ_SCALE)) {
 			tp->t_flags |= TF_RCVD_SCALE;
 			tp->snd_scale = to.to_wscale;
 		}
+#endif
 		/*
 		 * Initial send window.  It will be updated with
 		 * the next incoming segment to the scaled value.
 		 */
 		tp->snd_wnd = th->th_win;
+#if 0 // DON'T PROCESS OPTIONS YET
 		if (to.to_flags & TOF_TS) {
 			tp->t_flags |= TF_RCVD_TSTMP;
 			tp->ts_recent = to.to_tsval;
@@ -1545,8 +1552,8 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		if ((tp->t_flags & TF_SACK_PERMIT) &&
 		    (to.to_flags & TOF_SACKPERM) == 0)
 			tp->t_flags &= ~TF_SACK_PERMIT;
-	}
 #endif
+	}
 	/*
 	 * Header prediction: check for the two common cases
 	 * of a uni-directional data xfer.  If the packet has
@@ -1687,8 +1694,9 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				TCP_PROBE3(debug__input, tp, th,
 					mtod(m, const char *));
 #endif
-				if (tp->snd_una == tp->snd_max)
-					tcp_timer_activate(tp, TT_REXMT, 0);
+				if (tp->snd_una == tp->snd_max) {
+				    printf("Retranmitting delay 0: input 1696\n");
+					tcp_timer_activate(tp, TT_REXMT, 0); }
 				else if (!tcp_timer_active(tp, TT_PERSIST))
 					tcp_timer_activate(tp, TT_REXMT,
 						      tp->t_rxtcur);
@@ -1875,6 +1883,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	 *	continue processing rest of data/controls, beginning with URG
 	 */
 	case TCPS_SYN_SENT:
+	    printf("Entering switch statement in 1885\n");
 		if ((thflags & TH_ACK) &&
 		    (SEQ_LEQ(th->th_ack, tp->iss) ||
 		     SEQ_GT(th->th_ack, tp->snd_max))) {
@@ -1891,6 +1900,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		if (!(thflags & TH_SYN))
 			goto drop;
 
+        printf("Got past the drops\n");
 		tp->irs = th->th_seq;
 		tcp_rcvseqinit(tp);
 		if (thflags & TH_ACK) {
@@ -1938,6 +1948,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				tp->t_flags &= ~TF_NEEDFIN;
 				thflags &= ~TH_SYN;
 			} else {
+			    printf("Established!\n");
 				tcp_state_change(tp, TCPS_ESTABLISHED);
 //				TCP_PROBE5(connect__established, NULL, tp,
 //				    mtod(m, const char *), tp, th);
@@ -1955,6 +1966,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			 *        SYN-SENT* -> SYN-RECEIVED*
 			 */
 			tp->t_flags |= (TF_ACKNOW | TF_NEEDSYN);
+			printf("Retransmitting delay 0: 1964\n");
 			tcp_timer_activate(tp, TT_REXMT, 0);
 			tcp_state_change(tp, TCPS_SYN_RECEIVED);
 		}
@@ -2284,7 +2296,9 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		else
 			goto drop;
 	}
-
+	
+	printf("Processing ACK\n");
+	
 	/*
 	 * Ack processing.
 	 */
@@ -2457,6 +2471,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 					/* Congestion signal before ack. */
 //					cc_cong_signal(tp, th, CC_NDUPACK);
 //					cc_ack_received(tp, th, CC_DUPACK);
+					printf("Retransmitting delay 0: input 2467\n");
 					tcp_timer_activate(tp, TT_REXMT, 0);
 					tp->t_rtttime = 0;
 #if 0
@@ -2570,6 +2585,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			 * increment snd_una for ACK of SYN, and check if
 			 * we can do window scaling.
 			 */
+			printf("Fully synchronized now!\n");
 			tp->t_flags &= ~TF_NEEDSYN;
 			tp->snd_una++;
 			/* Do window scaling? */
@@ -2583,10 +2599,11 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 process_ACK:
 //		INP_WLOCK_ASSERT(tp->t_inpcb);
 
-//		acked = BYTES_THIS_ACK(tp, th);
+		acked = BYTES_THIS_ACK(tp, th);
 //		TCPSTAT_INC(tcps_rcvackpack);
 //		TCPSTAT_ADD(tcps_rcvackbyte, acked);
 
+		printf("Bytes acked: %d\n");
 		/*
 		 * If we just performed our first retransmit, and the ACK
 		 * arrives within our recovery window, then it was a mistake
@@ -2633,6 +2650,7 @@ process_ACK:
 		 * timer, using current (possibly backed-off) value.
 		 */
 		if (th->th_ack == tp->snd_max) {
+		    printf("Retransmitting 0: tcp_input 2644\n");
 			tcp_timer_activate(tp, TT_REXMT, 0);
 			needoutput = 1;
 		} else if (!tcp_timer_active(tp, TT_PERSIST))

@@ -24,6 +24,7 @@ module BsdTcpP {
     uint32_t get_ticks();
     void send_message(struct tcpcb* tp, struct ip6_packet* msg, struct tcphdr* th, uint32_t tlen);
     void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay);
+    void stop_timer(struct tcpcb* tcb, uint8_t timer_id);
     
 #include <bsdtcp/tcp_subr.c>
 #include <bsdtcp/tcp_output.c>
@@ -83,6 +84,7 @@ module BsdTcpP {
                        struct ip6_metadata* meta) {
         // This is only being called if the IP address matches mine.
         // Match this to a TCP socket
+        volatile int j;
         int i;
         struct tcphdr* th;
         uint16_t sport, dport;
@@ -91,25 +93,30 @@ module BsdTcpP {
         th = (struct tcphdr*) packet;
         sport = th->th_sport; // network byte order
         dport = th->th_dport; // network byte order
+        printf("Got a packet!\n");
         if (get_checksum(&iph->ip6_src, &iph->ip6_dst, th, len)) {
             printf("Dropping packet: bad checksum\n");
+            return;
         }
         for (i = 0; i < NUMBSDTCPACTIVESOCKETS; i++) {
             tcb = &tcbs[i];
             if (tcb->t_state != TCP6S_CLOSED && dport == tcb->lport && sport == tcb->fport && !memcmp(&iph->ip6_src, &tcb->faddr, sizeof(iph->ip6_src))) {
                 // Matches this active socket
+                printf("Matches active socket %d\n", i); 
                 tcp_input(iph, (struct tcphdr*) packet, &tcbs[i], NULL);
                 return;
             }
         }
         for (i = 0; i < NUMBSDTCPPASSIVESOCKETS; i++) {
             tcbl = &tcbls[i];
-            if (tcbl->t_state == TCP6S_LISTEN && dport == tcb->lport) {
+            if (tcbl->t_state == TCP6S_LISTEN && dport == tcbl->lport) {
                 // Matches this passive socket
+                printf("Matches passive socket %d\n", i);
                 tcp_input(iph, (struct tcphdr*) packet, NULL, &tcbls[i]);
                 return;
             }
         }
+        printf("Does not match any socket\n");
     }
     
     event void IPAddress.changed(bool valid) {
@@ -125,15 +132,17 @@ module BsdTcpP {
     }
     
     command error_t BSDTCPPassiveSocket.bind[uint8_t psockid](uint16_t port) {
+        tcbls[psockid].lport = htons(port);
         return SUCCESS;
     }
     
-    command error_t BSDTCPPassiveSocket.listenaccept[uint8_t psockid](struct sockaddr_in6* addr, int activesockid) {
+    command error_t BSDTCPPassiveSocket.listenaccept[uint8_t psockid](int asockid) {
         tcbls[psockid].t_state = TCP6S_LISTEN;
-        if (tcbs[activesockid].t_state != TCP6S_CLOSED) {
+        if (tcbs[asockid].t_state != TCP6S_CLOSED) {
             printf("Cannot accept connection into active socket that isn't closed\n");
             return -1;
         }
+        tcbls[psockid].acceptinto = &tcbs[asockid];
         return SUCCESS;
     }
     
@@ -164,8 +173,12 @@ module BsdTcpP {
 
     /* Wrapper for underlying C code. */
     void send_message(struct tcpcb* tp, struct ip6_packet* msg, struct tcphdr* th, uint32_t tlen) {
+        char destaddr[100];
         call IPAddress.setSource(&msg->ip6_hdr);
+        th->th_sum = 0; // should be zero already, but just in case
         th->th_sum = get_checksum(&msg->ip6_hdr.ip6_src, &msg->ip6_hdr.ip6_dst, th, tlen);
+        inet_ntop6(&msg->ip6_hdr.ip6_dst, destaddr, 100);
+        printf("Sending message to %s\n", destaddr);
         call IP.send(msg);
     }
     
@@ -175,10 +188,21 @@ module BsdTcpP {
     
     void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay) {
         uint8_t tcb_index = (uint8_t) tcb->index;
-        uint8_t timer_index = (tcb_index << 2) & timer_id;
-        if (timer_index > 0x3) {
+        uint8_t timer_index = (tcb_index << 2) | timer_id;
+        if (timer_id > 0x3) {
             printf("WARNING: setting out of bounds timer!\n");
         }
-        call Timer.startOneShot[timer_index](delay * MILLIS_PER_TICK);
+        printf("Setting timer %d, delay is %d\n", timer_index, delay * MILLIS_PER_TICK);
+        call Timer.startOneShot[timer_index](delay * MILLIS_PER_TICK + 10);
+    }
+    
+    void stop_timer(struct tcpcb* tcb, uint8_t timer_id) {
+        uint8_t tcb_index = (uint8_t) tcb->index;
+        uint8_t timer_index = (tcb_index << 2) & timer_id;
+        if (timer_index > 0x3) {
+            printf("WARNING: stopping out of bounds timer!\n");
+        }
+        printf("Stopping timer %d\n", timer_index);
+        call Timer.stop[timer_index]();
     }
 }
