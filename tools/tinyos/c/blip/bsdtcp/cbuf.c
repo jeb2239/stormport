@@ -43,7 +43,7 @@ size_t cbuf_free_space(uint8_t* buf) {
 
 size_t cbuf_size(uint8_t* buf) {
     struct circbuf_header* chdr = (struct circbuf_header*) buf;
-    return chdr->size;
+    return chdr->size - 1;
 }
 
 size_t cbuf_write(uint8_t* buf, uint8_t* data, size_t data_len) {

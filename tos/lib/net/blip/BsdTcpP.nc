@@ -93,7 +93,12 @@ module BsdTcpP {
         th = (struct tcphdr*) packet;
         sport = th->th_sport; // network byte order
         dport = th->th_dport; // network byte order
-        printf("Got a packet! SYN = %d, ACK = %d\n", th->th_flags & TH_SYN, th->th_flags & TH_ACK);
+        #ifndef BLIP_STFU
+        printf("TCP - IP.recv: len: %i (%i) srcport: %u dstport: %u SYN: %d ACK: %d, FIN: %d\n",
+            ntohs(iph->ip6_plen), len,
+            ntohs(sport), ntohs(dport),
+            (th->th_flags & TH_SYN) != 0, (th->th_flags & TH_ACK) != 0, (th->th_flags & TH_FIN) != 0);
+        #endif
         if (get_checksum(&iph->ip6_src, &iph->ip6_dst, th, len)) {
             printf("Dropping packet: bad checksum\n");
             return;

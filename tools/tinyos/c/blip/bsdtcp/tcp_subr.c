@@ -235,6 +235,8 @@ tcp_state_change(struct tcpcb *tp, int newstate)
 	int pstate = tp->t_state;
 #endif
 #endif
+    int pstate = tp->t_state;
+    printf("Socket %d: %s --> %s\n", tp->index, tcpstates[pstate], tcpstates[newstate]);
 	tp->t_state = newstate;
 #if 0
 	TCP_PROBE6(state__change, NULL, tp, NULL, tp, NULL, pstate);

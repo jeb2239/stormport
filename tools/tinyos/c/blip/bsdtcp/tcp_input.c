@@ -1867,7 +1867,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				goto dropwithreset;
 		} else if ((thflags & TH_SYN) && (th->th_seq == tp->irs)) { // this clause was added by Sam
 		    tp->snd_nxt = tp->snd_una;
-		    tcp_output(tp);
+		    tp->t_flags |= TF_ACKNOW;//tcp_output(tp);
 		}
 		break;
 
@@ -1951,7 +1951,6 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				tp->t_flags &= ~TF_NEEDFIN;
 				thflags &= ~TH_SYN;
 			} else {
-			    printf("Established!\n");
 				tcp_state_change(tp, TCPS_ESTABLISHED);
 //				TCP_PROBE5(connect__established, NULL, tp,
 //				    mtod(m, const char *), tp, th);
@@ -2333,7 +2332,6 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			tcp_state_change(tp, TCPS_FIN_WAIT_1);
 			tp->t_flags &= ~TF_NEEDFIN;
 		} else {
-		    printf("SYN_RECEIVED --> ESTABLISHED\n");
 			tcp_state_change(tp, TCPS_ESTABLISHED);
 //			TCP_PROBE5(accept__established, NULL, tp,
 //			    mtod(m, const char *), tp, th);
