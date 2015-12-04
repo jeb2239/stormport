@@ -40,7 +40,7 @@ uint16_t get_checksum(struct in6_addr* src, struct in6_addr* dest,
     if (len & 0x1u) {
         // Edge case for odd-length packet
         end = (uint16_t*) (((uint8_t*) end) - 1);
-        total += (*((uint8_t*) end)) << 8;
+        total += ((uint16_t) *((uint8_t*) end));
     }
     
     for (current = (uint16_t*) tcpseg;

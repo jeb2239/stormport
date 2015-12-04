@@ -156,12 +156,15 @@ module BsdTcpP {
         return tcp6_usr_connect(tp, addr);
     }
     
-    command error_t BSDTCPActiveSocket.send[uint8_t asockid](uint8_t* data, uint8_t length) {
-        return SUCCESS;
+    command error_t BSDTCPActiveSocket.send[uint8_t asockid](uint8_t* data, uint8_t length, int moretocome, size_t* bytessent) {
+        struct tcpcb* tp = &tcbs[asockid];
+        return (error_t) tcp_usr_send(tp, moretocome, data, length, bytessent);
     }
     
-    command uint8_t BSDTCPActiveSocket.receive[uint8_t asockid](uint8_t* buffer, uint8_t len) {
-        return 0;
+    command error_t BSDTCPActiveSocket.receive[uint8_t asockid](uint8_t* buffer, uint8_t len, size_t* bytessent) {
+        struct tcpcb* tp = &tcbs[asockid];
+        *bytessent = cbuf_read(tp->recvbuf, buffer, len, 1);
+        return (error_t) tcp_usr_rcvd(tp);
     }
     
     command error_t BSDTCPActiveSocket.close[uint8_t asockid]() {

@@ -226,6 +226,7 @@ tcp_timer_persist(struct tcpcb* tp)
 
 	tcp_setpersist(tp);
 	tp->t_flags |= TF_FORCEDATA;
+	printf("Persist output: %d bytes in sendbuf\n", cbuf_used_space(tp->sendbuf));
 	(void) tcp_output(tp);
 	tp->t_flags &= ~TF_FORCEDATA;
 

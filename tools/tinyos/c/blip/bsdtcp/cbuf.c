@@ -1,4 +1,5 @@
 /* CIRCULAR BUFFER */
+#include "printf.h"
 
 struct circbuf_header {
     size_t r_index;
@@ -131,7 +132,7 @@ size_t cbuf_peek_segment(uint8_t* buf, uint8_t* data, size_t numbytes) {
 size_t cbuf_pop(uint8_t* buf, size_t numbytes) {
     struct circbuf_header* chdr = (struct circbuf_header*) buf;
     size_t used_space = _cbuf_used_space(chdr);
-    if (used_space > numbytes) {
+    if (used_space < numbytes) {
         numbytes = used_space;
     }
     chdr->r_index = (chdr->r_index + numbytes) % chdr->size;

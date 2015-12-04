@@ -367,7 +367,6 @@ after_sack_rexmit:
 		len = 0;
 		if ((sendwin == 0) && (TCPS_HAVEESTABLISHED(tp->t_state)) &&
 			(off < (int) /*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf))) {
-			printf("Retransmit delay 0: 370\n");
 			tcp_timer_activate(tp, TT_REXMT, 0);
 			tp->t_rxtshift = 0;
 			tp->snd_nxt = tp->snd_una;

@@ -25,6 +25,9 @@ module BSDTCPDriverP {
     
     async command syscall_rv_t Driver.syscall_ex(uint32_t number, uint32_t arg0, uint32_t arg1, uint32_t arg2, uint32_t* argx) {
         struct sockaddr_in6 addr;
+        uint8_t* buffer;
+        size_t length;
+        size_t xbytes = 0;
         switch (number & 0xFF) {
             case 0x00: // connect
                 addr.sin6_port = htons(32067);
@@ -44,10 +47,20 @@ module BSDTCPDriverP {
                 call BSDTCPPassiveSocket.listenaccept(0);
                 printf("Accepting into socket 0\n");
                 break;
+            case 0x03: // send
+                buffer = (uint8_t*) arg0;
+                length = (size_t) arg1;
+                printf("Send rv = %d\n", call BSDTCPActiveSocket.send(buffer, length, 0, &xbytes));
+                break;
+            case 0x04: // receive
+                buffer = (uint8_t*) arg0;
+                length = (size_t) arg1;
+                printf("Receive rv = %d\n", call BSDTCPActiveSocket.receive(buffer, length, &xbytes));
+                break;
             default:
                 printf("Doing nothing\n");
                 break;
         }
-        return 0;
+        return (syscall_rv_t) xbytes;
     }
 }

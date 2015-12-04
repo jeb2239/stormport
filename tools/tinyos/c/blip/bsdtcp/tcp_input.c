@@ -2605,7 +2605,7 @@ process_ACK:
 //		TCPSTAT_INC(tcps_rcvackpack);
 //		TCPSTAT_ADD(tcps_rcvackbyte, acked);
 
-		printf("Bytes acked: %d\n");
+		printf("Bytes acked: %d\n", acked);
 		/*
 		 * If we just performed our first retransmit, and the ACK
 		 * arrives within our recovery window, then it was a mistake
@@ -2677,9 +2677,11 @@ process_ACK:
 			tp->snd_wnd -= cbuf_used_space(tp->sendbuf);
 //			mfree = sbcut_locked(&so->so_snd,
 //			    (int)sbavail(&so->so_snd));
+			cbuf_pop(tp->sendbuf, cbuf_used_space(tp->sendbuf));
 			ourfinisacked = 1;
 		} else {
 //			mfree = sbcut_locked(&so->so_snd, acked);
+			cbuf_pop(tp->sendbuf, acked);
 			tp->snd_wnd -= acked;
 			ourfinisacked = 0;
 		}
@@ -2779,8 +2781,8 @@ step6:
 	    (tp->snd_wl1 == th->th_seq && (SEQ_LT(tp->snd_wl2, th->th_ack) ||
 	     (tp->snd_wl2 == th->th_ack && tiwin > tp->snd_wnd))))) {
 		/* keep track of pure window updates */
-		if (tlen == 0 &&
-		    tp->snd_wl2 == th->th_ack && tiwin > tp->snd_wnd)
+//		if (tlen == 0 &&
+//		    tp->snd_wl2 == th->th_ack && tiwin > tp->snd_wnd)
 //			TCPSTAT_INC(tcps_rcvwinupd);
 		tp->snd_wnd = tiwin;
 		tp->snd_wl1 = th->th_seq;

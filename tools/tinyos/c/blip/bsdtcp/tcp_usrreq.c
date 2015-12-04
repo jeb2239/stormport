@@ -260,3 +260,219 @@ out:
 #endif
 	return (error);
 }
+
+/*
+ * Do a send by putting data in output queue and updating urgent
+ * marker if URG set.  Possibly send more data.  Unlike the other
+ * pru_*() routines, the mbuf chains are our responsibility.  We
+ * must either enqueue them or free them.  The other pru_* routines
+ * generally are caller-frees.
+ */
+/* I changed the signature of this function. */
+/*static int
+tcp_usr_send(struct socket *so, int flags, struct mbuf *m,
+    struct sockaddr *nam, struct mbuf *control, struct thread *td)*/
+/* Returns error condition, and stores bytes sent into SENT. */
+static int tcp_usr_send(struct tcpcb* tp, int moretocome, uint8_t* buf, size_t buflen, size_t* sent)
+{
+	int error = 0;
+//	struct inpcb *inp;
+//	struct tcpcb *tp = NULL;
+#if 0
+#ifdef INET6
+	int isipv6;
+#endif
+	TCPDEBUG0;
+#endif
+	if (tp->t_state == TCP6S_TIME_WAIT) { // copied from the commented-out code from below
+		error = ECONNRESET;
+		goto out;
+	}
+	/*
+	 * We require the pcbinfo lock if we will close the socket as part of
+	 * this call.
+	 */
+#if 0
+	if (flags & PRUS_EOF)
+		INP_INFO_RLOCK(&V_tcbinfo);
+	inp = sotoinpcb(so);
+	KASSERT(inp != NULL, ("tcp_usr_send: inp == NULL"));
+	INP_WLOCK(inp);
+	if (inp->inp_flags & (INP_TIMEWAIT | INP_DROPPED)) {
+		if (control)
+			m_freem(control);
+		/*
+		 * In case of PRUS_NOTREADY, tcp_usr_ready() is responsible
+		 * for freeing memory.
+		 */
+		if (m && (flags & PRUS_NOTREADY) == 0)
+			m_freem(m);
+		error = ECONNRESET;
+		goto out;
+	}
+#ifdef INET6
+	isipv6 = nam && nam->sa_family == AF_INET6;
+#endif /* INET6 */
+	tp = intotcpcb(inp);
+	TCPDEBUG1();
+	if (control) {
+		/* TCP doesn't do control messages (rights, creds, etc) */
+		if (control->m_len) {
+			m_freem(control);
+			if (m)
+				m_freem(m);
+			error = EINVAL;
+			goto out;
+		}
+		m_freem(control);	/* empty control, just free it */
+	}
+	if (!(flags & PRUS_OOB)) {
+#endif // DON'T SUPPORT URGENT DATA
+		/*sbappendstream(&so->so_snd, m, flags);*/
+		*sent = cbuf_write(tp->sendbuf, buf, buflen);
+#if 0 // DON'T SUPPORT IMPLIED CONNECTION
+		if (nam && tp->t_state < TCPS_SYN_SENT) {
+			/*
+			 * Do implied connect if not yet connected,
+			 * initialize window to default value, and
+			 * initialize maxseg/maxopd using peer's cached
+			 * MSS.
+			 */
+#ifdef INET6
+			if (isipv6)
+				error = tcp6_connect(tp, nam, td);
+#endif /* INET6 */
+#if defined(INET6) && defined(INET)
+			else
+#endif
+#ifdef INET
+				error = tcp_connect(tp, nam, td);
+#endif
+			if (error)
+				goto out;
+			tp->snd_wnd = TTCP_CLIENT_SND_WND;
+			tcp_mss(tp, -1);
+		}
+#endif
+#if 0
+		if (flags & PRUS_EOF) {
+			/*
+			 * Close the send side of the connection after
+			 * the data is sent.
+			 */
+			INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
+			socantsendmore(so);
+			tcp_usrclosed(tp);
+		}
+#endif
+//		if (!(inp->inp_flags & INP_DROPPED) &&
+//		    !(flags & PRUS_NOTREADY)) {
+			if (/*flags & PRUS_MORETOCOME*/ moretocome)
+				tp->t_flags |= TF_MORETOCOME;
+			error = tcp_output(tp);
+			if (/*flags & PRUS_MORETOCOME*/ moretocome)
+				tp->t_flags &= ~TF_MORETOCOME;
+//		}
+#if 0 // DON'T SUPPORT OUT-OF-BAND DATA (URGENT POINTER IN TCP CASE)
+	} else {
+		/*
+		 * XXXRW: PRUS_EOF not implemented with PRUS_OOB?
+		 */
+		SOCKBUF_LOCK(&so->so_snd);
+		if (sbspace(&so->so_snd) < -512) {
+			SOCKBUF_UNLOCK(&so->so_snd);
+			m_freem(m);
+			error = ENOBUFS;
+			goto out;
+		}
+		/*
+		 * According to RFC961 (Assigned Protocols),
+		 * the urgent pointer points to the last octet
+		 * of urgent data.  We continue, however,
+		 * to consider it to indicate the first octet
+		 * of data past the urgent section.
+		 * Otherwise, snd_up should be one lower.
+		 */
+		sbappendstream_locked(&so->so_snd, m, flags);
+		SOCKBUF_UNLOCK(&so->so_snd);
+		if (nam && tp->t_state < TCPS_SYN_SENT) {
+			/*
+			 * Do implied connect if not yet connected,
+			 * initialize window to default value, and
+			 * initialize maxseg/maxopd using peer's cached
+			 * MSS.
+			 */
+#ifdef INET6
+			if (isipv6)
+				error = tcp6_connect(tp, nam, td);
+#endif /* INET6 */
+#if defined(INET6) && defined(INET)
+			else
+#endif
+#ifdef INET
+				error = tcp_connect(tp, nam, td);
+#endif
+			if (error)
+				goto out;
+			tp->snd_wnd = TTCP_CLIENT_SND_WND;
+			tcp_mss(tp, -1);
+		}
+		tp->snd_up = tp->snd_una + sbavail(&so->so_snd);
+		if (!(flags & PRUS_NOTREADY)) {
+			tp->t_flags |= TF_FORCEDATA;
+			error = tcp_output(tp);
+			tp->t_flags &= ~TF_FORCEDATA;
+		}
+	}
+#endif
+out:
+#if 0 // REMOVE THEIR SYNCHRONIZATION
+	TCPDEBUG2((flags & PRUS_OOB) ? PRU_SENDOOB :
+		  ((flags & PRUS_EOF) ? PRU_SEND_EOF : PRU_SEND));
+	TCP_PROBE2(debug__user, tp, (flags & PRUS_OOB) ? PRU_SENDOOB :
+		   ((flags & PRUS_EOF) ? PRU_SEND_EOF : PRU_SEND));
+	INP_WUNLOCK(inp);
+	if (flags & PRUS_EOF)
+		INP_INFO_RUNLOCK(&V_tcbinfo);
+#endif
+	return (error);
+}
+
+/*
+ * After a receive, possibly send window update to peer.
+ */
+static int
+tcp_usr_rcvd(struct tcpcb* tp/*, int flags*/)
+{
+//	struct inpcb *inp;
+//	struct tcpcb *tp = NULL;
+	int error = 0;
+	if (tp->t_state == TCP6S_TIME_WAIT) {
+		error = ECONNRESET;
+		goto out;
+	}
+#if 0
+	TCPDEBUG0;
+	inp = sotoinpcb(so);
+	KASSERT(inp != NULL, ("tcp_usr_rcvd: inp == NULL"));
+	INP_WLOCK(inp);
+	if (inp->inp_flags & (INP_TIMEWAIT | INP_DROPPED)) {
+		error = ECONNRESET;
+		goto out;
+	}
+	tp = intotcpcb(inp);
+	TCPDEBUG1();
+#ifdef TCP_OFFLOAD
+	if (tp->t_flags & TF_TOE)
+		tcp_offload_rcvd(tp);
+	else
+#endif
+#endif
+	tcp_output(tp);
+
+out:
+//	TCPDEBUG2(PRU_RCVD);
+//	TCP_PROBE2(debug__user, tp, PRU_RCVD);
+//	INP_WUNLOCK(inp);
+	return (error);
+}
