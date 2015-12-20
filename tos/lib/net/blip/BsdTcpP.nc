@@ -207,7 +207,7 @@ module BsdTcpP {
     
     void stop_timer(struct tcpcb* tcb, uint8_t timer_id) {
         uint8_t tcb_index = (uint8_t) tcb->index;
-        uint8_t timer_index = (tcb_index << 2) & timer_id;
+        uint8_t timer_index = (tcb_index << 2) | timer_id;
         if (timer_index > 0x3) {
             printf("WARNING: stopping out of bounds timer!\n");
         }

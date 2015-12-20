@@ -248,6 +248,7 @@ after_sack_rexmit:
 	 * and go to transmit state.
 	 */
 	if (tp->t_flags & TF_FORCEDATA) {
+		printf("Force data: sendwin is %d\n", sendwin);
 		if (sendwin == 0) {
 			/*
 			 * If we still have some data to send, then
