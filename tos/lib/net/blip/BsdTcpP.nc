@@ -103,6 +103,7 @@ module BsdTcpP {
             printf("Dropping packet: bad checksum\n");
             return;
         }
+        tcp_fields_to_host(th);
         for (i = 0; i < NUMBSDTCPACTIVESOCKETS; i++) {
             tcb = &tcbs[i];
             if (tcb->t_state != TCP6S_CLOSED && dport == tcb->lport && sport == tcb->fport && !memcmp(&iph->ip6_src, &tcb->faddr, sizeof(iph->ip6_src))) {

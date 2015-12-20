@@ -352,6 +352,7 @@ tcp_mss_update(struct tcpcb *tp, int offer, int mtuoffer,
  */
 /* The signature of this function was originally:
    tcp_input(struct mbuf **mp, int *offp, int proto) */
+/* NOTE: tcp_fields_to_host(th) must be called before this function is called. */
 int
 tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb_listen* tpl)
 {
@@ -577,8 +578,9 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb
 
 	/*
 	 * Convert TCP protocol specific fields to host format.
+	 * Sam: I moved this call before this function, in case we return early on a time-wait socket and start over.
 	 */
-	tcp_fields_to_host(th);
+	//tcp_fields_to_host(th);
 
 	/*
 	 * Delay dropping TCP, IP headers, IPv6 ext headers, and TCP options.
