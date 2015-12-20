@@ -169,7 +169,7 @@ again:
 #endif
 	mtu = 0;
 	off = tp->snd_nxt - tp->snd_una;
-	sendwin = min(tp->snd_wnd, tp->snd_cwnd);
+	sendwin = tp->snd_wnd;//min(tp->snd_wnd, tp->snd_cwnd);
 
 	flags = tcp_outflags[tp->t_state];
 	/*
@@ -248,7 +248,7 @@ after_sack_rexmit:
 	 * and go to transmit state.
 	 */
 	if (tp->t_flags & TF_FORCEDATA) {
-		printf("Force data: sendwin is %d\n", sendwin);
+		printf("Force data: sendwin is %d, without cc %d\n", sendwin, tp->snd_wnd);
 		if (sendwin == 0) {
 			/*
 			 * If we still have some data to send, then
@@ -371,8 +371,9 @@ after_sack_rexmit:
 			tcp_timer_activate(tp, TT_REXMT, 0);
 			tp->t_rxtshift = 0;
 			tp->snd_nxt = tp->snd_una;
-			if (!tcp_timer_active(tp, TT_PERSIST))
-				tcp_setpersist(tp);
+			if (!tcp_timer_active(tp, TT_PERSIST)) {
+			    printf("Setting persist: 375\n");
+				tcp_setpersist(tp);}
 		}
 	}
 	
@@ -639,6 +640,7 @@ dontupdate:
 	if (/*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf) && !tcp_timer_active(tp, TT_REXMT) &&
 	    !tcp_timer_active(tp, TT_PERSIST)) {
 		tp->t_rxtshift = 0;
+		printf("Setting persist: 643\n");
 		tcp_setpersist(tp);
 	}
 
@@ -1476,6 +1478,7 @@ timer:
 			 * persist timer.
 			 */
 			tp->t_rxtshift = 0;
+			printf("Setting persist: 1479\n");
 			tcp_setpersist(tp);
 		}
 	} else {
