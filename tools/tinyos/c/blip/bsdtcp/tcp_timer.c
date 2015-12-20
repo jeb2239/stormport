@@ -307,6 +307,13 @@ tcp_timer_2msl(struct tcpcb* tp)
 	    (tp->t_inpcb->inp_socket->so_rcv.sb_state & SBS_CANTRCVMORE)*/) {
 //		TCPSTAT_INC(tcps_finwait2_drops);
 		tp = tcp_close(tp);             
+	} else if (tp->t_state = TCP6S_TIME_WAIT) { // Added by Sam
+		/* Normally, this timer isn't used for sockets in the Time-wait state; instead the
+		   tcp_tw_2msl_scan method is called periodically on the slow timer, and expired
+		   tcbtw structs are closed and freed.
+		   
+		   Instead, I keep the socket around, so I just use this timer to do it. */
+		   tp = tcp_close(tp);
 	} else {
 		if (ticks - tp->t_rcvtime <= TP_MAXIDLE(tp)) {
 		/*

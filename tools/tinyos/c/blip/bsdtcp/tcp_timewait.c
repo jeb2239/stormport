@@ -41,7 +41,8 @@ tcp_tw_2msl_reset(struct tcpcb* tp, int rearm)
 //	TW_WLOCK(V_tw_lock);
 //	if (rearm)
 //		TAILQ_REMOVE(&V_twq_2msl, tw, tw_2msl);
-	/*tw*/tp->tw_time = get_ticks()/*ticks*/ + 2 * tcp_msl;
+//	/*tw*/tp->tw_time = get_ticks()/*ticks*/ + 2 * tcp_msl;
+	tcp_timer_activate(tp, TT_2MSL, 2 * tcp_msl);
 //	TAILQ_INSERT_TAIL(&V_twq_2msl, tw, tw_2msl);
 //	TW_WUNLOCK(V_tw_lock);
 }
