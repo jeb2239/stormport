@@ -128,6 +128,10 @@ struct tcpcb {
 
 	struct	inpcb *t_inpcb;		/* back pointer to internet pcb */
 #endif
+
+	u_short	tw_last_win;       /* For time wait */
+	int		tw_time;           /* For time wait */
+
 	u_int	t_flags;
 
 //	struct	vnet *t_vnet;		/* back pointer to parent vnet */
@@ -587,7 +591,10 @@ tcp_fields_to_host(struct tcphdr *th)
 	th->th_urp = ntohs(th->th_urp);
 }
 
-void	 tcp_twstart(struct tcpcb *);
+void	 tcp_twstart(struct tcpcb*);
+void	 tcp_twclose(struct /*tcptw*/tcpcb*, int);
+int	 tcp_twcheck(struct tcpcb*,/*struct inpcb *, struct tcpopt *,*/ struct tcphdr *,
+	    /*struct mbuf *,*/ int);
 int	 tcp_output(struct tcpcb *);
 struct tcptemp *
 	 tcpip_maketemplate(struct /*inp*/tcpcb *);

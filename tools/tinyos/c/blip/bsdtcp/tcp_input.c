@@ -80,6 +80,8 @@ const int tcprexmtthresh = 3;
 const int V_drop_synfin = 0;
 // Copied from in.h
 #define IPPROTO_DONE 267
+// My own constant
+#define RELOOKUP_REQUIRED -1
 
 // I may turn on some of these flags later
 int V_tcp_do_ecn = 0;
@@ -785,15 +787,14 @@ relocked:
 		}
 		INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
 #endif
-#if 0 // HACK: FOR NOW, JUST IGNORE PACKETS IF THE SOCKET IS IN TIMEWAIT.
-		if (thflags & TH_SYN)
-			tcp_dooptions(&to, optp, optlen, TO_SYN);
+//		if (thflags & TH_SYN)
+//			tcp_dooptions(&to, optp, optlen, TO_SYN);
 		/*
 		 * NB: tcp_twcheck unlocks the INP and frees the mbuf.
 		 */
-		if (tcp_twcheck(inp, &to, th, m, tlen))
-			goto findpcb;
-#endif
+		if (tcp_twcheck(tp,/*inp, &to,*/ th, /*m,*/ tlen))
+			//goto findpcb;
+			return (RELOOKUP_REQUIRED);
 //		INP_INFO_RUNLOCK(&V_tcbinfo);
 		return (IPPROTO_DONE);
 	}
@@ -2944,6 +2945,7 @@ dodata:							/* XXX */
 	 * that the connection is closing.
 	 */
 	if (thflags & TH_FIN) {
+	    printf("FIN Processing start\n");
 		if (TCPS_HAVERCVDFIN(tp->t_state) == 0) {
 //			socantrcvmore(so);
 			/*

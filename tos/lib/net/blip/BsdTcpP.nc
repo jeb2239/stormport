@@ -108,7 +108,9 @@ module BsdTcpP {
             if (tcb->t_state != TCP6S_CLOSED && dport == tcb->lport && sport == tcb->fport && !memcmp(&iph->ip6_src, &tcb->faddr, sizeof(iph->ip6_src))) {
                 // Matches this active socket
                 printf("Matches active socket %d\n", i); 
-                tcp_input(iph, (struct tcphdr*) packet, &tcbs[i], NULL);
+                if (RELOOKUP_REQUIRED == tcp_input(iph, (struct tcphdr*) packet, &tcbs[i], NULL)) {
+                    break;
+                }
                 return;
             }
         }
@@ -168,7 +170,9 @@ module BsdTcpP {
     }
     
     command error_t BSDTCPActiveSocket.close[uint8_t asockid]() {
-    	return SUCCESS;
+        struct tcpcb* tp = &tcbs[asockid];
+        tcp_usr_close(tp);
+        return SUCCESS;
     }
     
     command error_t BSDTCPPassiveSocket.close[uint8_t psockid]() {

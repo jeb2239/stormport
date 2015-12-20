@@ -57,6 +57,9 @@ module BSDTCPDriverP {
                 length = (size_t) arg1;
                 printf("Receive rv = %d\n", call BSDTCPActiveSocket.receive(buffer, length, &xbytes));
                 break;
+            case 0x05: // close
+                call BSDTCPActiveSocket.close();
+                break;
             default:
                 printf("Doing nothing\n");
                 break;

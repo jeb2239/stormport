@@ -56,46 +56,6 @@ tcp_seq tcp_new_isn(struct tcpcb* tp) {
     return seed;
 }
  
- /*
- * Attempt to close a TCP control block, marking it as dropped, and freeing
- * the socket if we hold the only reference.
- */
-struct tcpcb *
-tcp_close(struct tcpcb *tp)
-{
-	// Seriously, it looks like this is all this function does, that I'm concerned with
-	return tp;
-#if 0
-	struct inpcb *inp = tp->t_inpcb;
-	struct socket *so;
-
-	INP_INFO_LOCK_ASSERT(&V_tcbinfo);
-	INP_WLOCK_ASSERT(inp);
-
-#ifdef TCP_OFFLOAD
-	if (tp->t_state == TCPS_LISTEN)
-		tcp_offload_listen_stop(tp);
-#endif
-	in_pcbdrop(inp);
-	TCPSTAT_INC(tcps_closed);
-	KASSERT(inp->inp_socket != NULL, ("tcp_close: inp_socket NULL"));
-	so = inp->inp_socket;
-	soisdisconnected(so);
-	if (inp->inp_flags & INP_SOCKREF) {
-		KASSERT(so->so_state & SS_PROTOREF,
-		    ("tcp_close: !SS_PROTOREF"));
-		inp->inp_flags &= ~INP_SOCKREF;
-		INP_WUNLOCK(inp);
-		ACCEPT_LOCK();
-		SOCK_LOCK(so);
-		so->so_state &= ~SS_PROTOREF;
-		sofree(so);
-		return (NULL);
-	}
-	return (tp);
-#endif
-}
- 
 /* This is based on tcp_init in tcp_subr.c. */
 void tcp_init(void) {
 #if 0 // I'M NOT USING A HASH TABLE TO STORE TCBS. I SUPPORT SUFFICIENTLY FEW THAT A LIST IS BETTER.
@@ -277,6 +237,49 @@ void initialize_tcb(struct tcpcb* tp) {
 	tp->t_maxseg = 1200;
 }
 
+ /*
+ * Attempt to close a TCP control block, marking it as dropped, and freeing
+ * the socket if we hold the only reference.
+ */
+struct tcpcb *
+tcp_close(struct tcpcb *tp)
+{
+	// Seriously, it looks like this is all this function does, that I'm concerned with
+	tcp_cancel_timers(tp);
+	tcp_state_change(tp, TCP6S_CLOSED); // for the print statement
+	initialize_tcb(tp);
+	return tp;
+#if 0
+	struct inpcb *inp = tp->t_inpcb;
+	struct socket *so;
+
+	INP_INFO_LOCK_ASSERT(&V_tcbinfo);
+	INP_WLOCK_ASSERT(inp);
+
+#ifdef TCP_OFFLOAD
+	if (tp->t_state == TCPS_LISTEN)
+		tcp_offload_listen_stop(tp);
+#endif
+	in_pcbdrop(inp);
+	TCPSTAT_INC(tcps_closed);
+	KASSERT(inp->inp_socket != NULL, ("tcp_close: inp_socket NULL"));
+	so = inp->inp_socket;
+	soisdisconnected(so);
+	if (inp->inp_flags & INP_SOCKREF) {
+		KASSERT(so->so_state & SS_PROTOREF,
+		    ("tcp_close: !SS_PROTOREF"));
+		inp->inp_flags &= ~INP_SOCKREF;
+		INP_WUNLOCK(inp);
+		ACCEPT_LOCK();
+		SOCK_LOCK(so);
+		so->so_state &= ~SS_PROTOREF;
+		sofree(so);
+		return (NULL);
+	}
+	return (tp);
+#endif
+}
+
 /*
  * Create template to be used to send tcp packets on a connection.
  * Allocates an mbuf and fills in a skeletal tcp/ip header.  The only
@@ -426,8 +429,8 @@ tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
 	ip6->ip6_src = ip6gen->ip6_dst;
 	ip6->ip6_dst = ip6gen->ip6_src;
 	nth = (struct tcphdr*) (ip6 + 1);
-	nth->th_sport = thgen->th_dport;
-	nth->th_dport = thgen->th_sport;
+	nth->th_sport = tp->lport;
+	nth->th_dport = tp->fport;
 	nth->th_seq = htonl(seq);
 	nth->th_ack = htonl(ack);
 	nth->th_x2 = 0;

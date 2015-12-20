@@ -42,6 +42,9 @@
 #define __u6_addr in6_u
 #define __u6_addr32 u6_addr32
 
+static void	tcp_disconnect(struct tcpcb *);
+static void	tcp_usrclosed(struct tcpcb *);
+
 #if 0
 static int
 tcp6_usr_bind(struct socket *so, struct sockaddr *nam, struct thread *td)
@@ -475,4 +478,144 @@ out:
 //	TCP_PROBE2(debug__user, tp, PRU_RCVD);
 //	INP_WUNLOCK(inp);
 	return (error);
+}
+
+/*
+ * Initiate (or continue) disconnect.
+ * If embryonic state, just send reset (once).
+ * If in ``let data drain'' option and linger null, just drop.
+ * Otherwise (hard), mark socket disconnecting and drop
+ * current input data; switch states based on user close, and
+ * send segment to peer (with FIN).
+ */
+static void
+tcp_disconnect(struct tcpcb *tp)
+{
+//	struct inpcb *inp = tp->t_inpcb;
+//	struct socket *so = inp->inp_socket;
+
+//	INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
+//	INP_WLOCK_ASSERT(inp);
+
+	/*
+	 * Neither tcp_close() nor tcp_drop() should return NULL, as the
+	 * socket is still open.
+	 */
+	if (tp->t_state < TCPS_ESTABLISHED) {
+		tp = tcp_close(tp);
+		KASSERT(tp != NULL,
+		    ("tcp_disconnect: tcp_close() returned NULL"));
+	}/* else if ((so->so_options & SO_LINGER) && so->so_linger == 0) {
+		tp = tcp_drop(tp, 0);
+		KASSERT(tp != NULL,
+		    ("tcp_disconnect: tcp_drop() returned NULL"));
+	}*/ else {
+//		soisdisconnecting(so);
+//		sbflush(&so->so_rcv);
+		tcp_usrclosed(tp);
+//		if (!(inp->inp_flags & INP_DROPPED))
+			tcp_output(tp);
+	}
+}
+
+/*
+ * User issued close, and wish to trail through shutdown states:
+ * if never received SYN, just forget it.  If got a SYN from peer,
+ * but haven't sent FIN, then go to FIN_WAIT_1 state to send peer a FIN.
+ * If already got a FIN from peer, then almost done; go to LAST_ACK
+ * state.  In all other cases, have already sent FIN to peer (e.g.
+ * after PRU_SHUTDOWN), and just have to play tedious game waiting
+ * for peer to send FIN or not respond to keep-alives, etc.
+ * We can let the user exit from the close as soon as the FIN is acked.
+ */
+static void
+tcp_usrclosed(struct tcpcb *tp)
+{
+
+//	INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
+//	INP_WLOCK_ASSERT(tp->t_inpcb);
+
+	switch (tp->t_state) {
+	case TCPS_LISTEN:
+//#ifdef TCP_OFFLOAD
+//		tcp_offload_listen_stop(tp);
+//#endif
+		tcp_state_change(tp, TCPS_CLOSED);
+		/* FALLTHROUGH */
+	case TCPS_CLOSED:
+		tp = tcp_close(tp);
+		/*
+		 * tcp_close() should never return NULL here as the socket is
+		 * still open.
+		 */
+		KASSERT(tp != NULL,
+		    ("tcp_usrclosed: tcp_close() returned NULL"));
+		break;
+
+	case TCPS_SYN_SENT:
+	case TCPS_SYN_RECEIVED:
+		tp->t_flags |= TF_NEEDFIN;
+		break;
+
+	case TCPS_ESTABLISHED:
+		tcp_state_change(tp, TCPS_FIN_WAIT_1);
+		break;
+
+	case TCPS_CLOSE_WAIT:
+		tcp_state_change(tp, TCPS_LAST_ACK);
+		break;
+	}
+	if (tp->t_state >= TCPS_FIN_WAIT_2) {
+//		soisdisconnected(tp->t_inpcb->inp_socket);
+		/* Prevent the connection hanging in FIN_WAIT_2 forever. */
+		if (tp->t_state == TCPS_FIN_WAIT_2) {
+			int timeout;
+
+			timeout = (tcp_fast_finwait2_recycle) ? 
+			    tcp_finwait2_timeout : TP_MAXIDLE(tp);
+			tcp_timer_activate(tp, TT_2MSL, timeout);
+		}
+	}
+}
+
+/*
+ * TCP socket is closed.  Start friendly disconnect.
+ */
+static void
+tcp_usr_close(struct tcpcb* tp/*struct socket *so*/)
+{
+//	struct inpcb *inp;
+//	struct tcpcb *tp = NULL;
+//	TCPDEBUG0;
+
+//	inp = sotoinpcb(so);
+//	KASSERT(inp != NULL, ("tcp_usr_close: inp == NULL"));
+
+//	INP_INFO_RLOCK(&V_tcbinfo);
+//	INP_WLOCK(inp);
+//	KASSERT(inp->inp_socket != NULL,
+//	    ("tcp_usr_close: inp_socket == NULL"));
+
+	/*
+	 * If we still have full TCP state, and we're not dropped, initiate
+	 * a disconnect.
+	 */
+	if (tp->t_state != TCP6S_TIME_WAIT/*!(inp->inp_flags & INP_TIMEWAIT) &&
+	    !(inp->inp_flags & INP_DROPPED)*/) {
+//		tp = intotcpcb(inp);
+//		TCPDEBUG1();
+		tcp_disconnect(tp);
+//		TCPDEBUG2(PRU_CLOSE);
+//		TCP_PROBE2(debug__user, tp, PRU_CLOSE);
+	}
+#if 0
+	if (!(inp->inp_flags & INP_DROPPED)) {
+		SOCK_LOCK(so);
+		so->so_state |= SS_PROTOREF;
+		SOCK_UNLOCK(so);
+		inp->inp_flags |= INP_SOCKREF;
+	}
+#endif
+//	INP_WUNLOCK(inp);
+//	INP_INFO_RUNLOCK(&V_tcbinfo);
 }

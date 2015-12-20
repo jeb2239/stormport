@@ -138,6 +138,7 @@ static const char *tcptimers[] =
 
 int tcp_timer_active(struct tcpcb *tp, uint32_t timer_type);
 void tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta);
+void tcp_cancel_timers(struct tcpcb* tp);
 
 /*
  * Force a time value to be in a certain range.

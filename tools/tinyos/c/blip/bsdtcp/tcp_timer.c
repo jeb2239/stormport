@@ -634,3 +634,11 @@ tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta) {
 	}
 }
 
+void
+tcp_cancel_timers(struct tcpcb* tp) {
+    stop_timer(tp, TOS_REXMT);
+    stop_timer(tp, TOS_PERSIST);
+    stop_timer(tp, TOS_KEEP);
+    stop_timer(tp, TOS_2MSL);
+}
+
