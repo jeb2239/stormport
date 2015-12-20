@@ -2233,6 +2233,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	 * (and PUSH and FIN); if nothing left, just ACK.
 	 */
 	todrop = (th->th_seq + tlen) - (tp->rcv_nxt + tp->rcv_wnd);
+//	printf("todrop is %d\n", todrop);
 	if (todrop > 0) {
 //		TCPSTAT_INC(tcps_rcvpackafterwin);
 		if (todrop >= tlen) {
@@ -2255,6 +2256,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		m_adj(m, -todrop);
 #endif
 		tlen -= todrop;
+//		printf("Adjusted tlen from %d to %d\n", tlen + todrop, tlen);
 		thflags &= ~(TH_PUSH|TH_FIN);
 	}
 
@@ -2904,6 +2906,7 @@ dodata:							/* XXX */
 			else
 */
 				//sbappendstream_locked(&so->so_rcv, m, 0);
+			//printf("Writing %d bytes to receive buffer\n", tlen);
 				cbuf_write(tp->recvbuf, ((uint8_t*) th) + (th->th_off << 2), tlen);
 			/* NB: sorwakeup_locked() does an implicit unlock. */
 //			sorwakeup_locked(so);

@@ -569,10 +569,14 @@ after_sack_rexmit:
 		if (oldwin >> tp->rcv_scale == (adv + oldwin) >> tp->rcv_scale)
 			goto dontupdate;
 
+#if 0 // My window size and max seg size are on different orders of magnitude than what is expected
 		if (adv >= (long)(2 * tp->t_maxseg) &&
 		    (adv >= (long)(/*so->so_rcv.sb_hiwat*/cbuf_size(tp->recvbuf) / 4) ||
 		     recwin <= (long)(/*so->so_rcv.sb_hiwat*/cbuf_size(tp->recvbuf) / 8) ||
 		     /*so->so_rcv.sb_hiwat*/cbuf_size(tp->recvbuf) <= 8 * tp->t_maxseg))
+			goto send;
+#endif
+		if (adv >= (long) cbuf_size(tp->recvbuf) / 4)
 			goto send;
 	}
 dontupdate:
@@ -1447,7 +1451,6 @@ timer:
 				tcp_timer_activate(tp, TT_PERSIST, 0);
 				tp->t_rxtshift = 0;
 			}
-			printf("Retransmit timer 1450\n");
 			tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
 		} else if (len == 0 && /*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf) &&
 		    !tcp_timer_active(tp, TT_REXMT) &&
@@ -1545,6 +1548,7 @@ timer:
 			if (tso)
 				tp->t_flags &= ~TF_TSO;
 #endif
+			printf("MTU size changed\n");
 			if (mtu != 0) {
 				tcp_mss_update(tp, -1, mtu, NULL, NULL);
 				goto again;
