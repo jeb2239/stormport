@@ -125,6 +125,7 @@ module BsdTcpP {
             }
         }
         printf("Does not match any socket\n");
+        tcp_dropwithreset(iph, th, NULL, len - (th->th_off << 2), ECONNREFUSED);
     }
     
     event void IPAddress.changed(bool valid) {

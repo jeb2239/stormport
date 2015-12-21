@@ -137,7 +137,7 @@ tcp_dropwithreset(struct ip6_hdr* ip6, struct tcphdr *th, struct tcpcb *tp,
 	else
 #endif
 #ifdef INET
-	{
+	{x
 		ip = mtod(m, struct ip *);
 		if (IN_MULTICAST(ntohl(ip->ip_dst.s_addr)) ||
 		    IN_MULTICAST(ntohl(ip->ip_src.s_addr)) ||

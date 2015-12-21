@@ -429,8 +429,8 @@ tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
 	ip6->ip6_src = ip6gen->ip6_dst;
 	ip6->ip6_dst = ip6gen->ip6_src;
 	nth = (struct tcphdr*) (ip6 + 1);
-	nth->th_sport = tp->lport;
-	nth->th_dport = tp->fport;
+	nth->th_sport = thgen->th_dport;
+	nth->th_dport = thgen->th_sport;
 	nth->th_seq = htonl(seq);
 	nth->th_ack = htonl(ack);
 	nth->th_x2 = 0;
