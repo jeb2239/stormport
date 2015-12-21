@@ -1823,6 +1823,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				m_adj(m, drop_hdrlen);	/* delayed header drop */
 #endif
 //				sbappendstream_locked(&so->so_rcv, m, 0);
+			if (!(tp->bufstate & TCB_CANTRCVMORE))
 				cbuf_write(tp->recvbuf, ((uint8_t*) th) + (th->th_off << 2), tlen);
 //			}
 			/* NB: sorwakeup_locked() does an implicit unlock. */
@@ -2731,13 +2732,14 @@ process_ACK:
 				 * we should release the tp also, and use a
 				 * compressed state.
 				 */
-//				if (so->so_rcv.sb_state & SBS_CANTRCVMORE) {
+				if (/*so->so_rcv.sb_state & SBS_CANTRCVMORE*/
+				    tp->bufstate & TCB_CANTRCVMORE) {
 //					soisdisconnected(so);
 					tcp_timer_activate(tp, TT_2MSL,
 					    (tcp_fast_finwait2_recycle ?
 					    tcp_finwait2_timeout :
 					    TP_MAXIDLE(tp)));
-//				}
+				}
 				tcp_state_change(tp, TCPS_FIN_WAIT_2);
 			}
 			break;
@@ -2910,6 +2912,7 @@ dodata:							/* XXX */
 */
 				//sbappendstream_locked(&so->so_rcv, m, 0);
 			//printf("Writing %d bytes to receive buffer\n", tlen);
+			if (!(tp->bufstate & TCB_CANTRCVMORE))
 				cbuf_write(tp->recvbuf, ((uint8_t*) th) + (th->th_off << 2), tlen);
 			/* NB: sorwakeup_locked() does an implicit unlock. */
 //			sorwakeup_locked(so);
@@ -2950,6 +2953,7 @@ dodata:							/* XXX */
 	    printf("FIN Processing start\n");
 		if (TCPS_HAVERCVDFIN(tp->t_state) == 0) {
 //			socantrcvmore(so);
+            tpcantrcvmore(tp);
 			/*
 			 * If connection is half-synchronized
 			 * (ie NEEDSYN flag on) then delay ACK,

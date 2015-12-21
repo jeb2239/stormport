@@ -279,6 +279,7 @@ tcp_usr_send(struct socket *so, int flags, struct mbuf *m,
 static int tcp_usr_send(struct tcpcb* tp, int moretocome, uint8_t* buf, size_t buflen, size_t* sent)
 {
 	int error = 0;
+	*sent = 0;
 //	struct inpcb *inp;
 //	struct tcpcb *tp = NULL;
 #if 0
@@ -291,6 +292,9 @@ static int tcp_usr_send(struct tcpcb* tp, int moretocome, uint8_t* buf, size_t b
 		error = ECONNRESET;
 		goto out;
 	}
+	
+	if (tp->bufstate & TCB_CANTSENDMORE)
+	    goto out;
 	/*
 	 * We require the pcbinfo lock if we will close the socket as part of
 	 * this call.
@@ -519,6 +523,49 @@ tcp_disconnect(struct tcpcb *tp)
 }
 
 /*
+ * Mark the connection as being incapable of further output.
+ */
+static int
+tcp_usr_shutdown(struct tcpcb* tp)
+{
+	int error = 0;
+#if 0
+	struct inpcb *inp;
+	struct tcpcb *tp = NULL;
+
+	TCPDEBUG0;
+	INP_INFO_RLOCK(&V_tcbinfo);
+	inp = sotoinpcb(so);
+	KASSERT(inp != NULL, ("inp == NULL"));
+	INP_WLOCK(inp);
+#endif
+	if (/*inp->inp_flags & (INP_TIMEWAIT | INP_DROPPED)*/
+	    tp->t_state == TCP6S_TIME_WAIT) {
+		error = ECONNRESET;
+		goto out;
+	}
+#if 0
+	tp = intotcpcb(inp);
+	TCPDEBUG1();
+#endif
+//	socantsendmore(so);
+	tpcantsendmore(tp);
+	tcp_usrclosed(tp);
+//	if (!(inp->inp_flags & INP_DROPPED))
+		error = tcp_output(tp);
+
+out:
+#if 0
+	TCPDEBUG2(PRU_SHUTDOWN);
+	TCP_PROBE2(debug__user, tp, PRU_SHUTDOWN);
+	INP_WUNLOCK(inp);
+	INP_INFO_RUNLOCK(&V_tcbinfo);
+#endif
+	return (error);
+}
+
+
+/*
  * User issued close, and wish to trail through shutdown states:
  * if never received SYN, just forget it.  If got a SYN from peer,
  * but haven't sent FIN, then go to FIN_WAIT_1 state to send peer a FIN.
@@ -604,6 +651,8 @@ tcp_usr_close(struct tcpcb* tp/*struct socket *so*/)
 	    !(inp->inp_flags & INP_DROPPED)*/) {
 //		tp = intotcpcb(inp);
 //		TCPDEBUG1();
+		tpcantsendmore(tp);
+		tpcantrcvmore(tp); /* Added by Sam: This would be probably be done at the socket layer. */
 		tcp_disconnect(tp);
 //		TCPDEBUG2(PRU_CLOSE);
 //		TCP_PROBE2(debug__user, tp, PRU_CLOSE);

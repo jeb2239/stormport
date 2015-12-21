@@ -98,6 +98,12 @@ struct tcpcb_listen {
     struct tcpcb* acceptinto;
 };
 
+#define TCB_CANTRCVMORE 0x1
+#define TCB_CANTSENDMORE 0x2
+
+#define tpcantrcvmore(tp) tp->bufstate |= TCB_CANTRCVMORE
+#define tpcantsendmore(tp) tp->bufstate |= TCB_CANTSENDMORE
+
 /*
  * Tcp control block, one per tcp; fields:
  * Organized for 16 byte cacheline efficiency.
@@ -109,6 +115,7 @@ struct tcpcb {
 	int index; /* Index/ID of this TCB */
 	uint32_t activetimers;
 	
+	uint8_t bufstate;
 	uint8_t sendbuf[100];
 	uint8_t recvbuf[100];
 	

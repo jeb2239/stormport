@@ -171,6 +171,11 @@ module BsdTcpP {
         return (error_t) tcp_usr_rcvd(tp);
     }
     
+    command error_t BSDTCPActiveSocket.shutdown[uint8_t asockid]() {
+        tcp_usr_shutdown(&tcbs[asockid]);
+        return SUCCESS;
+    }
+    
     command error_t BSDTCPActiveSocket.close[uint8_t asockid]() {
         tcp_usr_close(&tcbs[asockid]);
         return SUCCESS;

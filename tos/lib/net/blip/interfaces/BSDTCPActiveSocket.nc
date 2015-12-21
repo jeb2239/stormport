@@ -13,7 +13,7 @@ interface BSDTCPActiveSocket {
     
     event void closed(uint8_t how);
     
+    command error_t shutdown();
     command error_t close();
-    
     command error_t abort();
 }

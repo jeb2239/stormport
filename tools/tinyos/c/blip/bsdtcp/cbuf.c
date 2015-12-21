@@ -1,5 +1,4 @@
 /* CIRCULAR BUFFER */
-#include "printf.h"
 
 struct circbuf_header {
     size_t r_index;
