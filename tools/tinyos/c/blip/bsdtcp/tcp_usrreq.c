@@ -619,3 +619,47 @@ tcp_usr_close(struct tcpcb* tp/*struct socket *so*/)
 //	INP_WUNLOCK(inp);
 //	INP_INFO_RUNLOCK(&V_tcbinfo);
 }
+
+/*
+ * Abort the TCP.  Drop the connection abruptly.
+ */
+static void
+tcp_usr_abort(/*struct socket *so*/struct tcpcb* tp)
+{
+#if 0
+	struct inpcb *inp;
+	struct tcpcb *tp = NULL;
+	TCPDEBUG0;
+
+	inp = sotoinpcb(so);
+	KASSERT(inp != NULL, ("tcp_usr_abort: inp == NULL"));
+
+	INP_INFO_RLOCK(&V_tcbinfo);
+	INP_WLOCK(inp);
+	KASSERT(inp->inp_socket != NULL,
+	    ("tcp_usr_abort: inp_socket == NULL"));
+#endif
+	/*
+	 * If we still have full TCP state, and we're not dropped, drop.
+	 */
+	if (/*!(inp->inp_flags & INP_TIMEWAIT) &&
+	    !(inp->inp_flags & INP_DROPPED)*/
+	    tp->t_state != TCP6S_TIME_WAIT &&
+	    tp->t_state != TCP6S_CLOSED) {
+//		tp = intotcpcb(inp);
+//		TCPDEBUG1();
+		tcp_drop(tp, ECONNABORTED);
+//		TCPDEBUG2(PRU_ABORT);
+//		TCP_PROBE2(debug__user, tp, PRU_ABORT);
+	}
+#if 0	
+	if (!(inp->inp_flags & INP_DROPPED)) {
+		SOCK_LOCK(so);
+		so->so_state |= SS_PROTOREF;
+		SOCK_UNLOCK(so);
+		inp->inp_flags |= INP_SOCKREF;
+	}
+	INP_WUNLOCK(inp);
+	INP_INFO_RUNLOCK(&V_tcbinfo);
+#endif
+}

@@ -172,16 +172,18 @@ module BsdTcpP {
     }
     
     command error_t BSDTCPActiveSocket.close[uint8_t asockid]() {
-        struct tcpcb* tp = &tcbs[asockid];
-        tcp_usr_close(tp);
+        tcp_usr_close(&tcbs[asockid]);
         return SUCCESS;
     }
     
     command error_t BSDTCPPassiveSocket.close[uint8_t psockid]() {
+        tcbls[psockid].t_state = TCP6S_CLOSED;
+        tcbls[psockid].acceptinto = NULL;
         return SUCCESS;
     }
     
     command error_t BSDTCPActiveSocket.abort[uint8_t asockid]() {
+        tcp_usr_abort(&tcbs[asockid]);
         return SUCCESS;
     }
 

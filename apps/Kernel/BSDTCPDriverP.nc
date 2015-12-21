@@ -60,6 +60,9 @@ module BSDTCPDriverP {
             case 0x05: // close
                 call BSDTCPActiveSocket.close();
                 break;
+            case 0x06: // abort
+                call BSDTCPActiveSocket.abort();
+                break;
             default:
                 printf("Doing nothing\n");
                 break;
