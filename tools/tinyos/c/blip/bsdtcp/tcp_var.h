@@ -101,8 +101,8 @@ struct tcpcb_listen {
 #define TCB_CANTRCVMORE 0x1
 #define TCB_CANTSENDMORE 0x2
 
-#define tpcantrcvmore(tp) tp->bufstate |= TCB_CANTRCVMORE
-#define tpcantsendmore(tp) tp->bufstate |= TCB_CANTSENDMORE
+#define tpcantrcvmore(tp) (tp)->bufstate |= TCB_CANTRCVMORE
+#define tpcantsendmore(tp) (tp)->bufstate |= TCB_CANTSENDMORE
 
 /*
  * Tcp control block, one per tcp; fields:
@@ -267,7 +267,7 @@ struct tcpcb {
 };
 
 /* Defined in tcp_subr.c. */
-void initialize_tcb(struct tcpcb* tp);
+void initialize_tcb(struct tcpcb* tp, uint16_t port, int index);
 
 /*
  * Flags and utility macros for the t_flags field.

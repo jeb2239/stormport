@@ -17,10 +17,13 @@ module BSDTCPDriverP {
     event void BSDTCPActiveSocket.connectDone(struct sockaddr_in6* addr) {
     }
     
-    event void BSDTCPActiveSocket.receiveReady(uint8_t numbytes) {
+    event void BSDTCPActiveSocket.receiveReady() {
     }
     
-    event void BSDTCPActiveSocket.closed(uint8_t how) {
+    event void BSDTCPActiveSocket.sendReady() {
+    }
+    
+    event void BSDTCPActiveSocket.connectionLost(uint8_t how) {
     }
     
     async command syscall_rv_t Driver.syscall_ex(uint32_t number, uint32_t arg0, uint32_t arg1, uint32_t arg2, uint32_t* argx) {
@@ -58,10 +61,10 @@ module BSDTCPDriverP {
                 printf("Receive rv = %d\n", call BSDTCPActiveSocket.receive(buffer, length, &xbytes));
                 break;
             case 0x05: // shutdown
-                call BSDTCPActiveSocket.shutdown();
+                call BSDTCPActiveSocket.shutdown(FALSE, TRUE);
                 break;
             case 0x06: // close
-                call BSDTCPActiveSocket.close();
+                call BSDTCPActiveSocket.shutdown(TRUE, TRUE);
                 break;
             case 0x07: // abort
                 call BSDTCPActiveSocket.abort();

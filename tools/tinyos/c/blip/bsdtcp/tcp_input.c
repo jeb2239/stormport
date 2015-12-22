@@ -94,7 +94,8 @@ static int imin(int a, int b) { return (a < b ? a : b); }
 
 static void
 tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
-    struct tcpcb *tp, int drop_hdrlen, int tlen, uint8_t iptos);
+    struct tcpcb *tp, int drop_hdrlen, int tlen, uint8_t iptos,
+    uint8_t* signals);
 
 /*
  * Issue RST and make ACK acceptable to originator of segment.
@@ -354,7 +355,7 @@ tcp_mss_update(struct tcpcb *tp, int offer, int mtuoffer,
    tcp_input(struct mbuf **mp, int *offp, int proto) */
 /* NOTE: tcp_fields_to_host(th) must be called before this function is called. */
 int
-tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb_listen* tpl)
+tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb_listen* tpl, uint8_t* signals)
 {
 	int tlen = 0, off;
 	int thflags;
@@ -1266,8 +1267,10 @@ relocked:
 //			ti_locked = TI_UNLOCKED;
 //		}
 //		INP_INFO_UNLOCK_ASSERT(&V_tcbinfo);
-        printf("Sending SYN-ACK\n");
+		printf("Sending SYN-ACK\n");
 		tcp_output(tp); // to send the SYN-ACK
+		
+		accepted_connection(tpl, &ip6->ip6_src, th->th_sport);
 		return (IPPROTO_DONE);
 	} else if (tp->t_state == TCPS_LISTEN) {
 		/*
@@ -1309,7 +1312,7 @@ relocked:
 	 * state.  tcp_do_segment() always consumes the mbuf chain, unlocks
 	 * the inpcb, and unlocks pcbinfo.
 	 */
-	tcp_do_segment(ip6, th, tp, drop_hdrlen, tlen, iptos);
+	tcp_do_segment(ip6, th, tp, drop_hdrlen, tlen, iptos, signals);
 //	INP_INFO_UNLOCK_ASSERT(&V_tcbinfo);
 	return (IPPROTO_DONE);
 
@@ -1380,7 +1383,8 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 */
 static void
 tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
-    struct tcpcb *tp, int drop_hdrlen, int tlen, uint8_t iptos)
+    struct tcpcb *tp, int drop_hdrlen, int tlen, uint8_t iptos,
+    uint8_t* signals)
 {
 	int thflags, acked, ourfinisacked, needoutput = 0;
 	int rstreason, todrop, win;
@@ -1823,8 +1827,13 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				m_adj(m, drop_hdrlen);	/* delayed header drop */
 #endif
 //				sbappendstream_locked(&so->so_rcv, m, 0);
-			if (!(tp->bufstate & TCB_CANTRCVMORE))
+			if (!(tp->bufstate & TCB_CANTRCVMORE)) {
+				size_t usedbefore = cbuf_used_space(tp->recvbuf);
 				cbuf_write(tp->recvbuf, ((uint8_t*) th) + (th->th_off << 2), tlen);
+				if (usedbefore == 0 && tlen > 0) {
+					*signals |= SIG_RECVBUF_NOTEMPTY;
+				}
+			}
 //			}
 			/* NB: sorwakeup_locked() does an implicit unlock. */
 //			sorwakeup_locked(so);
@@ -1956,6 +1965,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				thflags &= ~TH_SYN;
 			} else {
 				tcp_state_change(tp, TCPS_ESTABLISHED);
+				*signals |= SIG_CONN_ESTABLISHED;
 //				TCP_PROBE5(connect__established, NULL, tp,
 //				    mtod(m, const char *), tp, th);
 //				cc_conn_init(tp);
@@ -2079,6 +2089,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 					/* FALLTHROUGH */
 				default:
 					tp = tcp_close(tp);
+					connection_lost(tp, ECONNREFUSED);
 				}
 			} else {
 //				TCPSTAT_INC(tcps_badrst);
@@ -2339,6 +2350,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			tp->t_flags &= ~TF_NEEDFIN;
 		} else {
 			tcp_state_change(tp, TCPS_ESTABLISHED);
+			*signals |= SIG_CONN_ESTABLISHED;
 //			TCP_PROBE5(accept__established, NULL, tp,
 //			    mtod(m, const char *), tp, th);
 //			cc_conn_init(tp);
@@ -2679,15 +2691,24 @@ process_ACK:
 
 //		SOCKBUF_LOCK(&so->so_snd);
 		if (acked > /*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf)) {
+			size_t poppedbytes;
+			size_t usedspace = cbuf_used_space(tp->sendbuf);
 			//tp->snd_wnd -= sbavail(&so->so_snd);
-			tp->snd_wnd -= cbuf_used_space(tp->sendbuf);
+			tp->snd_wnd -= usedspace;
 //			mfree = sbcut_locked(&so->so_snd,
 //			    (int)sbavail(&so->so_snd));
-			cbuf_pop(tp->sendbuf, cbuf_used_space(tp->sendbuf));
+			poppedbytes = cbuf_pop(tp->sendbuf, usedspace);
+			KASSERT(poppedbytes == usedspace, ("Could not fully empty send buffer"));
+			if (usedspace == cbuf_size(tp->sendbuf) && poppedbytes > 0) {
+				*signals |= SIG_SENDBUF_NOTFULL;
+			}
 			ourfinisacked = 1;
 		} else {
 //			mfree = sbcut_locked(&so->so_snd, acked);
-			cbuf_pop(tp->sendbuf, acked);
+			size_t poppedbytes = cbuf_pop(tp->sendbuf, acked);
+			if (cbuf_free_space(tp->sendbuf) == poppedbytes && poppedbytes > 0) {
+				*signals |= SIG_SENDBUF_NOTFULL;
+			}
 			tp->snd_wnd -= acked;
 			ourfinisacked = 0;
 		}
@@ -2770,6 +2791,7 @@ process_ACK:
 			if (ourfinisacked) {
 //				INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
 				tp = tcp_close(tp);
+				connection_lost(tp, CONN_LOST_NORMAL);
 				goto drop;
 			}
 			break;
@@ -2912,8 +2934,13 @@ dodata:							/* XXX */
 */
 				//sbappendstream_locked(&so->so_rcv, m, 0);
 			//printf("Writing %d bytes to receive buffer\n", tlen);
-			if (!(tp->bufstate & TCB_CANTRCVMORE))
+			if (!(tp->bufstate & TCB_CANTRCVMORE)) {
+				size_t usedbefore = cbuf_used_space(tp->recvbuf);
 				cbuf_write(tp->recvbuf, ((uint8_t*) th) + (th->th_off << 2), tlen);
+				if (usedbefore == 0 && tlen > 0) {
+					*signals |= SIG_RECVBUF_NOTEMPTY;
+				}
+			}
 			/* NB: sorwakeup_locked() does an implicit unlock. */
 //			sorwakeup_locked(so);
 		} else {

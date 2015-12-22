@@ -21,27 +21,48 @@ module BsdTcpP {
 #include <bsdtcp/cbuf.h>
 #include <bsdtcp/tcp_var.h>
 
+	#define SIG_CONN_ESTABLISHED 0x01
+    #define SIG_SENDBUF_NOTFULL 0x02
+    #define SIG_RECVBUF_NOTEMPTY 0x04
+    
+    #define CONN_LOST_NORMAL 0x00
+    #define CONN_LOST_EPIPE 0x01
+    #define CONN_LOST_ECONNREFUSED 0x02
+
     uint32_t get_ticks();
     void send_message(struct tcpcb* tp, struct ip6_packet* msg, struct tcphdr* th, uint32_t tlen);
     void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay);
     void stop_timer(struct tcpcb* tcb, uint8_t timer_id);
+    void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16_t port);
+    void handle_signals(struct tcpcb* tp, uint8_t signals);
+    void connection_lost(struct tcpcb* tp, uint8_t reason);
     
 #include <bsdtcp/tcp_subr.c>
 #include <bsdtcp/tcp_output.c>
+
 #include <bsdtcp/tcp_input.c>
+
 #include <bsdtcp/tcp_timer.c>
 #include <bsdtcp/tcp_timewait.c>
 #include <bsdtcp/tcp_usrreq.c>
 #include <bsdtcp/checksum.c>
-    
+
     struct tcpcb tcbs[NUMBSDTCPACTIVESOCKETS];
     struct tcpcb_listen tcbls[NUMBSDTCPPASSIVESOCKETS];
     uint32_t ticks = 0;
     
     event void Boot.booted() {
+        int i;
         tcp_init();
-        initialize_tcb(&tcbs[0]);
-        tcbs[0].index = 0;
+        for (i = 0; i < NUMBSDTCPACTIVESOCKETS; i++) {
+            initialize_tcb(&tcbs[i], 0, i);
+        }
+        for (i = 0; i < NUMBSDTCPPASSIVESOCKETS; i++) {
+            tcbls[i].t_state = TCPS_CLOSED;
+            tcbls[i].index = i;
+            tcbls[i].lport = 0;
+            tcbls[i].acceptinto = NULL;
+        }
         call TickTimer.startPeriodic(MILLIS_PER_TICK);
     }
     
@@ -80,6 +101,23 @@ module BsdTcpP {
         }
     }
     
+    void handle_signals(struct tcpcb* tp, uint8_t signals) {
+        struct sockaddr_in6 addrport;
+        
+        if (signals & SIG_CONN_ESTABLISHED) {
+            addrport.sin6_port = tp->fport;
+            memcpy(&addrport.sin6_addr, &tp->faddr, 0);
+        
+            signal BSDTCPActiveSocket.connectDone[tp->index](&addrport);
+        }
+        if (signals & SIG_SENDBUF_NOTFULL) {
+            signal BSDTCPActiveSocket.sendReady[tp->index]();
+        }
+        if (signals & SIG_RECVBUF_NOTEMPTY) {
+            signal BSDTCPActiveSocket.receiveReady[tp->index]();
+        }
+    }
+    
     event void IP.recv(struct ip6_hdr* iph, void* packet, size_t len,
                        struct ip6_metadata* meta) {
         // This is only being called if the IP address matches mine.
@@ -90,6 +128,8 @@ module BsdTcpP {
         uint16_t sport, dport;
         struct tcpcb* tcb;
         struct tcpcb_listen* tcbl;
+        uint8_t signals = 0; // bitmask of signals that need to be sent to an upper layer
+        
         th = (struct tcphdr*) packet;
         sport = th->th_sport; // network byte order
         dport = th->th_dport; // network byte order
@@ -109,8 +149,10 @@ module BsdTcpP {
             if (tcb->t_state != TCP6S_CLOSED && dport == tcb->lport && sport == tcb->fport && !memcmp(&iph->ip6_src, &tcb->faddr, sizeof(iph->ip6_src))) {
                 // Matches this active socket
                 printf("Matches active socket %d\n", i); 
-                if (RELOOKUP_REQUIRED == tcp_input(iph, (struct tcphdr*) packet, &tcbs[i], NULL)) {
+                if (RELOOKUP_REQUIRED == tcp_input(iph, (struct tcphdr*) packet, &tcbs[i], NULL, &signals)) {
                     break;
+                } else {
+                    handle_signals(&tcbs[i], signals);
                 }
                 return;
             }
@@ -120,7 +162,7 @@ module BsdTcpP {
             if (tcbl->t_state == TCP6S_LISTEN && dport == tcbl->lport) {
                 // Matches this passive socket
                 printf("Matches passive socket %d\n", i);
-                tcp_input(iph, (struct tcphdr*) packet, NULL, &tcbls[i]);
+                tcp_input(iph, (struct tcphdr*) packet, NULL, &tcbls[i], NULL);
                 return;
             }
         }
@@ -171,13 +213,13 @@ module BsdTcpP {
         return (error_t) tcp_usr_rcvd(tp);
     }
     
-    command error_t BSDTCPActiveSocket.shutdown[uint8_t asockid]() {
-        tcp_usr_shutdown(&tcbs[asockid]);
-        return SUCCESS;
-    }
-    
-    command error_t BSDTCPActiveSocket.close[uint8_t asockid]() {
-        tcp_usr_close(&tcbs[asockid]);
+    command error_t BSDTCPActiveSocket.shutdown[uint8_t asockid](bool shut_rd, bool shut_wr) {
+        if (shut_rd) {
+            tpcantrcvmore(&tcbs[asockid]);
+        }
+        if (shut_wr) {
+            tcp_usr_shutdown(&tcbs[asockid]);
+        }
         return SUCCESS;
     }
     
@@ -190,6 +232,21 @@ module BsdTcpP {
     command error_t BSDTCPActiveSocket.abort[uint8_t asockid]() {
         tcp_usr_abort(&tcbs[asockid]);
         return SUCCESS;
+    }
+    
+    default event void BSDTCPPassiveSocket.acceptDone[uint8_t psockid](struct sockaddr_in6* addr, int asockid) {
+    }
+    
+    default event void BSDTCPActiveSocket.connectDone[uint8_t asockid](struct sockaddr_in6* addr) {
+    }
+    
+    default event void BSDTCPActiveSocket.sendReady[uint8_t asockid]() {
+    }
+    
+    default event void BSDTCPActiveSocket.receiveReady[uint8_t asockid]() {
+    }
+    
+    default event void BSDTCPActiveSocket.connectionLost[uint8_t asockid](uint8_t how) {
     }
 
     /* Wrapper for underlying C code. */
@@ -226,5 +283,18 @@ module BsdTcpP {
         }
         printf("Stopping timer %d\n", timer_index);
         call Timer.stop[timer_index]();
+    }
+    
+    void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16_t port) {
+        struct sockaddr_in6 addrport;
+        addrport.sin6_port = port;
+        memcpy(&addrport.sin6_addr, addr, sizeof(struct in6_addr));
+        signal BSDTCPPassiveSocket.acceptDone[tpl->index](&addrport, tpl->acceptinto->index);
+        tpl->t_state = TCPS_CLOSED;
+        tpl->acceptinto = NULL;
+    }
+    
+    void connection_lost(struct tcpcb* tcb, uint8_t reason) {
+        signal BSDTCPActiveSocket.connectionLost[tcb->index](reason);
     }
 }

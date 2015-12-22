@@ -204,10 +204,12 @@ tcp_state_change(struct tcpcb *tp, int newstate)
 }
 
  /* This is based on tcp_newtcb in tcp_subr.c, and tcp_usr_attach in tcp_usrreq.c. */
-void initialize_tcb(struct tcpcb* tp) {
+void initialize_tcb(struct tcpcb* tp, uint16_t lport, int index) {
 	int rv1, rv2;
 	
     memset(tp, 0x00, sizeof(struct tcpcb));
+    tp->lport = lport;
+    tp->index = index;
     // Congestion control algorithm. For now, don't include it.
     // CC_ALGO(tp) = CC_DEFAULT();
     
@@ -247,7 +249,7 @@ tcp_close(struct tcpcb *tp)
 	// Seriously, it looks like this is all this function does, that I'm concerned with
 	tcp_cancel_timers(tp);
 	tcp_state_change(tp, TCP6S_CLOSED); // for the print statement
-	initialize_tcb(tp);
+	initialize_tcb(tp, tp->lport, tp->index);
 	return tp;
 #if 0
 	struct inpcb *inp = tp->t_inpcb;
@@ -651,5 +653,8 @@ tcp_drop(struct tcpcb *tp, int errno)
 //	if (errno == ETIMEDOUT && tp->t_softerror)
 //		errno = tp->t_softerror;
 //	so->so_error = errno;
-	return (tcp_close(tp));
+//	return (tcp_close(tp));
+    tp = tcp_close(tp);
+    connection_lost(tp, CONN_LOST_EPIPE);
+    return tp;
 }

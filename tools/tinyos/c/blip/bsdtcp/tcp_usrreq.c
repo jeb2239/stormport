@@ -507,6 +507,7 @@ tcp_disconnect(struct tcpcb *tp)
 	 */
 	if (tp->t_state < TCPS_ESTABLISHED) {
 		tp = tcp_close(tp);
+		connection_lost(tp, CONN_LOST_NORMAL);
 		KASSERT(tp != NULL,
 		    ("tcp_disconnect: tcp_close() returned NULL"));
 	}/* else if ((so->so_options & SO_LINGER) && so->so_linger == 0) {

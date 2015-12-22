@@ -288,7 +288,7 @@ tcp_timer_2msl(struct tcpcb* tp)
 	 * again in a bit.
 	 *
 	 * If in TIME_WAIT state just ignore as this timeout is handled in
-	 * tcp_tw_2msl_scan().
+	 * tcp_tw_2msl_scan(). (Sam: not anymore)
 	 *
 	 * If fastrecycle of FIN_WAIT_2, in FIN_WAIT_2 and receiver has closed, 
 	 * there's no point in hanging onto FIN_WAIT_2 socket. Just close it. 
@@ -306,7 +306,8 @@ tcp_timer_2msl(struct tcpcb* tp)
 	    tp->t_inpcb && tp->t_inpcb->inp_socket && 
 	    (tp->t_inpcb->inp_socket->so_rcv.sb_state & SBS_CANTRCVMORE)*/) {
 //		TCPSTAT_INC(tcps_finwait2_drops);
-		tp = tcp_close(tp);             
+		tp = tcp_close(tp);
+		connection_lost(tp, CONN_LOST_NORMAL);
 	} else if (tp->t_state = TCP6S_TIME_WAIT) { // Added by Sam
 		/* Normally, this timer isn't used for sockets in the Time-wait state; instead the
 		   tcp_tw_2msl_scan method is called periodically on the slow timer, and expired
@@ -314,6 +315,7 @@ tcp_timer_2msl(struct tcpcb* tp)
 		   
 		   Instead, I keep the socket around, so I just use this timer to do it. */
 		   tp = tcp_close(tp);
+		   connection_lost(tp, CONN_LOST_NORMAL);
 	} else {
 		if (ticks - tp->t_rcvtime <= TP_MAXIDLE(tp)) {
 		/*
@@ -325,6 +327,7 @@ tcp_timer_2msl(struct tcpcb* tp)
 			set_timer(tp, TOS_2MSL, TP_KEEPINTVL(tp));
 		} else
 		       tp = tcp_close(tp);
+		       connection_lost(tp, CONN_LOST_NORMAL);
        }
 #if 0
 #ifdef TCPDEBUG

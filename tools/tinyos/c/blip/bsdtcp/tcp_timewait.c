@@ -420,6 +420,7 @@ tcp_twcheck(struct tcpcb* tp,/*struct inpcb *inp, struct tcpopt *to __unused, */
 	if ((thflags & TH_SYN) && SEQ_GT(th->th_seq, /*tw*/tp->rcv_nxt)) {
 		//tcp_twclose(tw, 0);
 		tcp_close(tp);
+		connection_lost(tp, CONN_LOST_NORMAL);
 		return (1);
 	}
 
