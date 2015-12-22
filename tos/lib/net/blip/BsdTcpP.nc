@@ -1,5 +1,7 @@
-#define NUMBSDTCPACTIVESOCKETS 2
-#define NUMBSDTCPPASSIVESOCKETS 2
+#include <bsdtcp.h>
+
+#define NUMBSDTCPACTIVESOCKETS uniqueCount(UQ_BSDTCP_ACTIVE)
+#define NUMBSDTCPPASSIVESOCKETS uniqueCount(UQ_BSDTCP_PASSIVE)
 
 #define hz 10 // number of ticks per second
 #define MILLIS_PER_TICK 100 // number of milliseconds per tick
