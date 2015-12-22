@@ -172,6 +172,10 @@ static int
 tcp6_usr_connect(struct tcpcb* tp, struct sockaddr_in6* sin6p)
 {
 	int error = 0;
+	
+	if (tp->t_state != TCPS_CLOSED) { // This is a check that I added
+		return (EISCONN);
+	}
 //	struct inpcb *inp;
 //	struct tcpcb *tp = NULL;
 //	struct sockaddr_in6 *sin6p;
@@ -288,13 +292,21 @@ static int tcp_usr_send(struct tcpcb* tp, int moretocome, uint8_t* buf, size_t b
 #endif
 	TCPDEBUG0;
 #endif
+	if (tp->t_state < TCPS_ESTABLISHED) { // This if statement and the next are checks that I added
+		error = ENOTCONN;
+		goto out;
+	}
+	
+	if (tp->bufstate & TCB_CANTSENDMORE) {
+		error = ESHUTDOWN;
+		goto out;
+	}
+	
 	if (tp->t_state == TCP6S_TIME_WAIT) { // copied from the commented-out code from below
 		error = ECONNRESET;
 		goto out;
 	}
 	
-	if (tp->bufstate & TCB_CANTSENDMORE)
-	    goto out;
 	/*
 	 * We require the pcbinfo lock if we will close the socket as part of
 	 * this call.
@@ -592,6 +604,7 @@ tcp_usrclosed(struct tcpcb *tp)
 		/* FALLTHROUGH */
 	case TCPS_CLOSED:
 		tp = tcp_close(tp);
+		connection_lost(tp, CONN_LOST_NORMAL);
 		/*
 		 * tcp_close() should never return NULL here as the socket is
 		 * still open.

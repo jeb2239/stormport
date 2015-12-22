@@ -655,6 +655,6 @@ tcp_drop(struct tcpcb *tp, int errno)
 //	so->so_error = errno;
 //	return (tcp_close(tp));
     tp = tcp_close(tp);
-    connection_lost(tp, CONN_LOST_EPIPE);
+    connection_lost(tp, errno);
     return tp;
 }

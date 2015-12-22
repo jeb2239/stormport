@@ -15,15 +15,19 @@ module BSDTCPDriverP {
     }
     
     event void BSDTCPActiveSocket.connectDone(struct sockaddr_in6* addr) {
+        printf("Connection done!\n");
     }
     
     event void BSDTCPActiveSocket.receiveReady() {
+        printf("Receive ready!\n");
     }
     
     event void BSDTCPActiveSocket.sendReady() {
+        printf("Send ready!\n");
     }
     
     event void BSDTCPActiveSocket.connectionLost(uint8_t how) {
+        printf("Connection lost!\n");
     }
     
     async command syscall_rv_t Driver.syscall_ex(uint32_t number, uint32_t arg0, uint32_t arg1, uint32_t arg2, uint32_t* argx) {

@@ -27,9 +27,7 @@ module BsdTcpP {
     #define SIG_SENDBUF_NOTFULL 0x02
     #define SIG_RECVBUF_NOTEMPTY 0x04
     
-    #define CONN_LOST_NORMAL 0x00
-    #define CONN_LOST_EPIPE 0x01
-    #define CONN_LOST_ECONNREFUSED 0x02
+    #define CONN_LOST_NORMAL 0 // errno of 0 means that the connection closed gracefully
 
     uint32_t get_ticks();
     void send_message(struct tcpcb* tp, struct ip6_packet* msg, struct tcphdr* th, uint32_t tlen);
@@ -296,7 +294,7 @@ module BsdTcpP {
         tpl->acceptinto = NULL;
     }
     
-    void connection_lost(struct tcpcb* tcb, uint8_t reason) {
-        signal BSDTCPActiveSocket.connectionLost[tcb->index](reason);
+    void connection_lost(struct tcpcb* tcb, uint8_t errno) {
+        signal BSDTCPActiveSocket.connectionLost[tcb->index](errno);
     }
 }

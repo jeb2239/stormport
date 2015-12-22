@@ -2073,23 +2073,26 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 */
 			if (/*V_tcp_insecure_rst ||*/
 			    tp->last_ack_sent == th->th_seq) {
+			    int droperror = 0;
 //				TCPSTAT_INC(tcps_drops);
 				/* Drop the connection. */
 				switch (tp->t_state) {
 				case TCPS_SYN_RECEIVED:
 //					so->so_error = ECONNREFUSED;
+					droperror = ECONNREFUSED;
 					goto close;
 				case TCPS_ESTABLISHED:
 				case TCPS_FIN_WAIT_1:
 				case TCPS_FIN_WAIT_2:
 				case TCPS_CLOSE_WAIT:
 //					so->so_error = ECONNRESET;
+					droperror = ECONNRESET;
 				close:
 					tcp_state_change(tp, TCPS_CLOSED);
 					/* FALLTHROUGH */
 				default:
 					tp = tcp_close(tp);
-					connection_lost(tp, ECONNREFUSED);
+					connection_lost(tp, droperror);
 				}
 			} else {
 //				TCPSTAT_INC(tcps_badrst);
