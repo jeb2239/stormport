@@ -1988,6 +1988,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			tp->t_flags |= (TF_ACKNOW | TF_NEEDSYN);
 			tcp_timer_activate(tp, TT_REXMT, 0);
 			tcp_state_change(tp, TCPS_SYN_RECEIVED);
+			tp->snd_nxt--; // Sam: We would have incremented snd_nxt in tcp_output when we sent the original SYN, so decrement it here
 		}
 /*
 		KASSERT(ti_locked == TI_RLOCKED, ("%s: trimthenstep6: "
@@ -2360,6 +2361,11 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		} else {
 			tcp_state_change(tp, TCPS_ESTABLISHED);
 			*signals |= SIG_CONN_ESTABLISHED;
+			if (!tp->passiveopen) { // Added by Sam: Accounts for simultaneous open
+				// If this socket was opened actively, then the fact we are in SYN-RECEIVED indicates a simultaneous open
+				// Don't ACK the SYN-ACK, in that case (unless it contains data or something, which will be processed later)
+				tp->t_flags &= ~TF_ACKNOW;
+			}
 //			TCP_PROBE5(accept__established, NULL, tp,
 //			    mtod(m, const char *), tp, th);
 //			cc_conn_init(tp);
@@ -2789,6 +2795,7 @@ process_ACK:
 		case TCPS_CLOSING:
 			if (ourfinisacked) {
 //				INP_INFO_RLOCK_ASSERT(&V_tcbinfo);
+				tp->t_flags &= ~TF_ACKNOW; // Added by Sam: Don't send an ACK in the Time-wait state, since we don't want to ACK ACKs.
 				tcp_twstart(tp);
 //				INP_INFO_RUNLOCK(&V_tcbinfo);
 //				m_freem(m);
