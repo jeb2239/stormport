@@ -177,14 +177,44 @@ module BsdTcpP {
         return tcbs[asockid].index;
     }
     
+    /* PORT is in network-byte order. */
+    bool portisfree(uint16_t port) {
+        int i;
+        for (i = 0; i < NUMBSDTCPACTIVESOCKETS; i++) {
+            if (tcbs[i].lport == port) {
+                return FALSE;
+            }
+        }
+        for (i = 0; i < NUMBSDTCPPASSIVESOCKETS; i++) {
+            if (tcbls[i].lport == port) {
+                return FALSE;
+            }
+        }
+        return TRUE;
+    }
+    
     command error_t BSDTCPActiveSocket.bind[uint8_t asockid](uint16_t port) {
-        tcbs[asockid].lport = htons(port);
-        return SUCCESS;
+        uint16_t oldport = tcbs[asockid].lport;
+        port = htons(port);
+        tcbs[asockid].lport = 0;
+        if (port == 0 || portisfree(port)) {
+            tcbs[asockid].lport = port;
+            return SUCCESS;
+        }
+        tcbs[asockid].lport = oldport;
+        return EADDRINUSE;
     }
     
     command error_t BSDTCPPassiveSocket.bind[uint8_t psockid](uint16_t port) {
-        tcbls[psockid].lport = htons(port);
-        return SUCCESS;
+        uint16_t oldport = tcbls[psockid].lport;
+        port = htons(port);
+        tcbls[psockid].lport = 0;
+        if (port == 0 || portisfree(port)) {
+            tcbls[psockid].lport = port;
+            return SUCCESS;
+        }
+        tcbls[psockid].lport = oldport;
+        return EADDRINUSE;
     }
     
     command error_t BSDTCPPassiveSocket.listenaccept[uint8_t psockid](int asockid) {
@@ -214,13 +244,14 @@ module BsdTcpP {
     }
     
     command error_t BSDTCPActiveSocket.shutdown[uint8_t asockid](bool shut_rd, bool shut_wr) {
+        int error = SUCCESS;
         if (shut_rd) {
             tpcantrcvmore(&tcbs[asockid]);
         }
         if (shut_wr) {
-            tcp_usr_shutdown(&tcbs[asockid]);
+            error = tcp_usr_shutdown(&tcbs[asockid]);
         }
-        return SUCCESS;
+        return error;
     }
     
     command error_t BSDTCPPassiveSocket.close[uint8_t psockid]() {

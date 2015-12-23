@@ -114,6 +114,7 @@ struct tcpcb {
 	/* Extra fields that I added. */
 	int index; /* Index/ID of this TCB */
 	uint32_t activetimers;
+	bool passiveopen; // Remembers if this TCB was initialized via a passive open or active open
 	
 	uint8_t bufstate;
 	uint8_t sendbuf[100];

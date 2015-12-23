@@ -1214,6 +1214,7 @@ relocked:
 		// CODE IS TAKEN FROM THE syncache_socket FUNCTION
 		tp = tpl->acceptinto;
 		tcp_state_change(tp, TCPS_SYN_RECEIVED);
+		tp->passiveopen = TRUE;
 		tp->t_flags |= TF_ACKNOW; // my addition
 		tp->iss = tcp_new_isn(tp);
 		tp->irs = th->th_seq;
@@ -1841,6 +1842,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				tp->t_flags |= TF_DELACK;
 			} else {*/
 				tp->t_flags |= TF_ACKNOW;
+				printf("ACKNOW 1\n");
 				tcp_output(tp);
 //			}
 			goto check_delack;
@@ -1878,9 +1880,10 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		     SEQ_GT(th->th_ack, tp->snd_max))) {
 				rstreason = BANDLIM_RST_OPENPORT;
 				goto dropwithreset;
-		} else if ((thflags & TH_SYN) && (th->th_seq == tp->irs)) { // this clause was added by Sam
-		    tp->snd_nxt = tp->snd_una;
+		} else if ((thflags & TH_SYN) && !(thflags & TH_ACK) && (th->th_seq == tp->irs)) { // this clause was added by Sam
+		    //tp->snd_nxt = tp->snd_una;
 		    tp->t_flags |= TF_ACKNOW;//tcp_output(tp);
+		    printf("ACKNOW 2\n");
 		}
 		break;
 
@@ -1946,6 +1949,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			else
 #endif
 				tp->t_flags |= TF_ACKNOW;
+			printf("ACKNOW 3\n");
 
 			if ((thflags & TH_ECE) && V_tcp_do_ecn) {
 				tp->t_flags |= TF_ECN_PERMIT;
@@ -2204,6 +2208,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			 * But keep on processing for RST or ACK.
 			 */
 			tp->t_flags |= TF_ACKNOW;
+			printf("ACKNOW 4\n");
 			todrop = tlen;
 //			TCPSTAT_INC(tcps_rcvduppack);
 //			TCPSTAT_ADD(tcps_rcvdupbyte, todrop);
@@ -2265,6 +2270,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			 */
 			if (tp->rcv_wnd == 0 && th->th_seq == tp->rcv_nxt) {
 				tp->t_flags |= TF_ACKNOW;
+				printf("ACKNOW 5\n");
 //				TCPSTAT_INC(tcps_rcvwinprobe);
 			} else
 				goto dropafterack;
@@ -2507,6 +2513,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 						goto drop;
 					}
 #endif
+					printf("ACK update: Changing tp->snd_nxt from %d to %d\n", tp->snd_nxt, th->th_ack);
 					tp->snd_nxt = th->th_ack;
 					tp->snd_cwnd = tp->t_maxseg;
 					(void) tcp_output(tp);
@@ -2516,8 +2523,9 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 					tp->snd_cwnd = tp->snd_ssthresh +
 					     tp->t_maxseg *
 					     (tp->t_dupacks - tp->snd_limited);
-					if (SEQ_GT(onxt, tp->snd_nxt))
-						tp->snd_nxt = onxt;
+					if (SEQ_GT(onxt, tp->snd_nxt)) {
+						printf("Revert: Changing tp->snd_nxt back from %d to %d\n", tp->snd_nxt, onxt);
+						tp->snd_nxt = onxt; }
 					goto drop;
 				} else if (V_tcp_do_rfc3042) {
 					/*
@@ -2674,9 +2682,12 @@ process_ACK:
 		 */
 		if (th->th_ack == tp->snd_max) {
 			tcp_timer_activate(tp, TT_REXMT, 0);
+			printf("Got here\n");
 			needoutput = 1;
-		} else if (!tcp_timer_active(tp, TT_PERSIST))
+		} else if (!tcp_timer_active(tp, TT_PERSIST)) {
+			printf("Retransmit timer 2683\n");
 			tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
+		}
 
 		/*
 		 * If no data (only SYN) was ACK'd,
@@ -2733,8 +2744,9 @@ process_ACK:
 			if (SEQ_GT(tp->snd_una, tp->snd_recover))
 				tp->snd_recover = tp->snd_una;
 		}
-		if (SEQ_LT(tp->snd_nxt, tp->snd_una))
-			tp->snd_nxt = tp->snd_una;
+		if (SEQ_LT(tp->snd_nxt, tp->snd_una)) {
+			printf("Changing tp->snd_nxt from %d to %d\n", tp->snd_nxt, tp->snd_una);
+			tp->snd_nxt = tp->snd_una; }
 
 		switch (tp->t_state) {
 
@@ -2821,6 +2833,7 @@ step6:
 		tp->snd_wl2 = th->th_ack;
 		if (tp->snd_wnd > tp->max_sndwnd)
 			tp->max_sndwnd = tp->snd_wnd;
+		printf("Got here 2\n");
 		needoutput = 1;
 	}
 
@@ -2925,6 +2938,7 @@ dodata:							/* XXX */
 //				tp->t_flags |= TF_DELACK;
 //			else
 				tp->t_flags |= TF_ACKNOW;
+			printf("ACKNOW 6\n");
 			tp->rcv_nxt += tlen;
 			thflags = th->th_flags & TH_FIN;
 //			TCPSTAT_INC(tcps_rcvpack);
@@ -2955,6 +2969,7 @@ dodata:							/* XXX */
 			 */
 //			thflags = tcp_reass(tp, th, &tlen, m);    NO SACK
 			tp->t_flags |= TF_ACKNOW;
+			printf("ACKNOW 7\n");
 		}
 //		if (tlen > 0 && (tp->t_flags & TF_SACK_PERMIT))
 //			tcp_update_sack_list(tp, save_start, save_start + tlen);
@@ -2991,10 +3006,11 @@ dodata:							/* XXX */
 			 * Otherwise, since we received a FIN then no
 			 * more input can be expected, send ACK now.
 			 */
-			if (tp->t_flags & TF_NEEDSYN)
-				tp->t_flags |= TF_DELACK;
-			else
+//			if (tp->t_flags & TF_NEEDSYN)
+//				tp->t_flags |= TF_DELACK;
+//			else
 				tp->t_flags |= TF_ACKNOW;
+			printf("ACLNOW 9\n");
 			tp->rcv_nxt++;
 		}
 		switch (tp->t_state) {
@@ -3102,6 +3118,7 @@ dropafterack:
 //	ti_locked = TI_UNLOCKED;
 
 	tp->t_flags |= TF_ACKNOW;
+	printf("ACKNOW 10\n");
 	(void) tcp_output(tp);
 //	INP_WUNLOCK(tp->t_inpcb);
 //	m_freem(m);

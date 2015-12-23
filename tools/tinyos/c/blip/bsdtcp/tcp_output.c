@@ -370,6 +370,7 @@ after_sack_rexmit:
 			(off < (int) /*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf))) {
 			tcp_timer_activate(tp, TT_REXMT, 0);
 			tp->t_rxtshift = 0;
+			printf("output unack: Setting tp->snd_nxt from %d to %d\n", tp->snd_nxt, tp->snd_una);
 			tp->snd_nxt = tp->snd_una;
 			if (!tcp_timer_active(tp, TT_PERSIST)) {
 			    printf("Setting persist: 375\n");
@@ -587,8 +588,10 @@ dontupdate:
 	 * Send if we owe the peer an ACK, RST, SYN, or urgent data.  ACKNOW
 	 * is also a catch-all for the retransmit timer timeout case.
 	 */
-	if (tp->t_flags & TF_ACKNOW)
+	if (tp->t_flags & TF_ACKNOW) {
+		printf("Got to the ACKNOW positive\n");
 		goto send;
+	}
 	if ((flags & TH_RST) ||
 	    ((flags & TH_SYN) && (tp->t_flags & TF_NEEDSYN) == 0))
 		goto send;
@@ -1067,8 +1070,9 @@ send:
 	 * If resending a FIN, be sure not to use a new sequence number.
 	 */
 	if (flags & TH_FIN && tp->t_flags & TF_SENTFIN &&
-	    tp->snd_nxt == tp->snd_max)
-		tp->snd_nxt--;
+	    tp->snd_nxt == tp->snd_max) {
+	    printf("Decrementing tp->snd_nxt from %d to %d\n", tp->snd_nxt, tp->snd_nxt - 1);
+		tp->snd_nxt--;}
 	/*
 	 * If we are starting a connection, send ECN setup
 	 * SYN packet. If we are on a retransmit, we may
@@ -1415,15 +1419,18 @@ out:
 		 * Advance snd_nxt over sequence space of this segment.
 		 */
 		if (flags & (TH_SYN|TH_FIN)) {
-			if (flags & TH_SYN)
-				tp->snd_nxt++;
+			if (flags & TH_SYN) {
+			    printf("output: SYN: incrementing tp->snd_nxt from %d to %d\n", tp->snd_nxt, tp->snd_nxt + 1);
+				tp->snd_nxt++; }
 			if (flags & TH_FIN) {
+				printf("output: FIN: incrementing tp->snd_nxt from %d to %d\n", tp->snd_nxt, tp->snd_nxt + 1);
 				tp->snd_nxt++;
 				tp->t_flags |= TF_SENTFIN;
 			}
 		}
 		if (sack_rxmit)
 			goto timer;
+		printf("output: incrementing tp->snd_nxt from %d to %d\n", tp->snd_nxt, tp->snd_nxt + len);
 		tp->snd_nxt += len;
 		if (SEQ_GT(tp->snd_nxt, tp->snd_max)) {
 			tp->snd_max = tp->snd_nxt;
@@ -1454,6 +1461,7 @@ timer:
 				tcp_timer_activate(tp, TT_PERSIST, 0);
 				tp->t_rxtshift = 0;
 			}
+			printf("Retransmit timer 1462\n");
 			tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
 		} else if (len == 0 && /*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf) &&
 		    !tcp_timer_active(tp, TT_REXMT) &&
@@ -1524,6 +1532,7 @@ timer:
 				    ("sackhint bytes rtx >= 0"));
 			} else
 #endif
+			printf("output: Decrementing tp->snd_nxt from %d to %d\n", tp->snd_nxt, tp->snd_nxt - len);
 				tp->snd_nxt -= len;
 		}
 		//SOCKBUF_UNLOCK_ASSERT(&so->so_snd);	/* Check gotos. */

@@ -37,8 +37,8 @@ module BSDTCPDriverP {
         size_t xbytes = 0;
         switch (number & 0xFF) {
             case 0x00: // connect
-                addr.sin6_port = htons(32067);
-                inet_pton6(/*"2001:0470:83ae:0002:*/"fe80::0212:6d02:0000:4021", &addr.sin6_addr);
+                addr.sin6_port = htons((uint16_t) arg0);
+                inet_pton6(/*"2001:0470:83ae:0002:*/"fe80::0212:6d02:0000:401c", &addr.sin6_addr);
                 call BSDTCPActiveSocket.connect(&addr);
                 break;
             case 0x01: // bind
