@@ -589,7 +589,6 @@ dontupdate:
 	 * is also a catch-all for the retransmit timer timeout case.
 	 */
 	if (tp->t_flags & TF_ACKNOW) {
-		printf("Got to the ACKNOW positive\n");
 		goto send;
 	}
 	if ((flags & TH_RST) ||
@@ -643,7 +642,6 @@ dontupdate:
 	if (/*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf) && !tcp_timer_active(tp, TT_REXMT) &&
 	    !tcp_timer_active(tp, TT_PERSIST)) {
 		tp->t_rxtshift = 0;
-		printf("Setting persist: 643\n");
 		tcp_setpersist(tp);
 	}
 
@@ -1070,9 +1068,8 @@ send:
 	 * If resending a FIN, be sure not to use a new sequence number.
 	 */
 	if (flags & TH_FIN && tp->t_flags & TF_SENTFIN &&
-	    tp->snd_nxt == tp->snd_max) {
-	    printf("Decrementing tp->snd_nxt from %d to %d\n", tp->snd_nxt, tp->snd_nxt - 1);
-		tp->snd_nxt--;}
+	    tp->snd_nxt == tp->snd_max)
+		tp->snd_nxt--;
 	/*
 	 * If we are starting a connection, send ECN setup
 	 * SYN packet. If we are on a retransmit, we may
@@ -1136,7 +1133,6 @@ send:
 			th->th_seq = htonl(tp->snd_nxt);
 		else
 			th->th_seq = htonl(tp->snd_max);
-	printf("Sequence number is %d\n", ntohl(th->th_seq));
 #if 0
 	} else {
 		th->th_seq = htonl(p->rxmit);
@@ -1419,11 +1415,9 @@ out:
 		 * Advance snd_nxt over sequence space of this segment.
 		 */
 		if (flags & (TH_SYN|TH_FIN)) {
-			if (flags & TH_SYN) {
-			    printf("output: SYN: incrementing tp->snd_nxt from %d to %d\n", tp->snd_nxt, tp->snd_nxt + 1);
-				tp->snd_nxt++; }
+			if (flags & TH_SYN)
+				tp->snd_nxt++;
 			if (flags & TH_FIN) {
-				printf("output: FIN: incrementing tp->snd_nxt from %d to %d\n", tp->snd_nxt, tp->snd_nxt + 1);
 				tp->snd_nxt++;
 				tp->t_flags |= TF_SENTFIN;
 			}
@@ -1461,7 +1455,6 @@ timer:
 				tcp_timer_activate(tp, TT_PERSIST, 0);
 				tp->t_rxtshift = 0;
 			}
-			printf("Retransmit timer 1462\n");
 			tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
 		} else if (len == 0 && /*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf) &&
 		    !tcp_timer_active(tp, TT_REXMT) &&
@@ -1486,7 +1479,6 @@ timer:
 			 * persist timer.
 			 */
 			tp->t_rxtshift = 0;
-			printf("Setting persist: 1479\n");
 			tcp_setpersist(tp);
 		}
 	} else {
@@ -1532,7 +1524,6 @@ timer:
 				    ("sackhint bytes rtx >= 0"));
 			} else
 #endif
-			printf("output: Decrementing tp->snd_nxt from %d to %d\n", tp->snd_nxt, tp->snd_nxt - len);
 				tp->snd_nxt -= len;
 		}
 		//SOCKBUF_UNLOCK_ASSERT(&so->so_snd);	/* Check gotos. */
@@ -1542,9 +1533,8 @@ timer:
 			return (error);
 		case ENOBUFS:
 	                if (!tcp_timer_active(tp, TT_REXMT) &&
-			    !tcp_timer_active(tp, TT_PERSIST)) {
-			                printf("Retransmit timer: 1530\n");
-	                        tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);}
+			    !tcp_timer_active(tp, TT_PERSIST))
+	                        tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
 			tp->snd_cwnd = tp->t_maxseg;
 			return (0);
 		case EMSGSIZE:
