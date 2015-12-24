@@ -1,6 +1,8 @@
 #ifndef __DRIVER_H__
 #define __DRIVER_H__
 
+#include <lib6lowpan/ip.h>
+
 //TODO
 
 typedef void* driver_callback_t;
@@ -38,6 +40,36 @@ typedef struct
     uint32_t arg0;
     uint32_t arg1;
 } ble_callback_t;
+
+#define NUM_CB_TYPES 5
+#define CONNECT_DONE 0x01
+#define SEND_READY 0x02
+#define RECV_READY 0x04
+#define CONNECTION_LOST 0x08
+#define ACCEPT_DONE 0x10
+#define IS_PASSIVE_CB(cbt) ((cbt) == ACCEPT_DONE)
+
+typedef struct
+{
+    uint32_t addr;
+    void* r;
+    uint8_t type;
+    uint32_t arg0;
+    // SEND_READY and RECV_READY don't require additional arguments
+    // CONNECTION_LOST requires a one-byte error code
+} __attribute__((packed)) tcp_lite_callback_t;
+
+typedef struct
+{
+    uint32_t addr;
+    void* r;
+    uint8_t type;
+    uint32_t arg0;
+    struct in6_addr src_address;
+    uint16_t src_port;
+    // CONNECT_DONE requires an IP Address and a two byte port.
+    // ACCEPT_DONE requires a four-byte fd and an IP Address and a two byte port.
+} __attribute__((packed)) tcp_full_callback_t;
 
 typedef uint32_t syscall_rv_t;
 /*
