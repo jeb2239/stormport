@@ -173,8 +173,16 @@ module BsdTcpP {
     event void IPAddress.changed(bool valid) {
     }
     
+    command int BSDTCPPassiveSocket.getID[uint8_t psockid]() {
+        return tcbls[psockid].index;
+    }
+    
     command int BSDTCPActiveSocket.getID[uint8_t asockid]() {
         return tcbs[asockid].index;
+    }
+    
+    command int BSDTCPActiveSocket.getState[uint8_t asockid]() {
+        return tcbs[asockid].t_state;
     }
     
     /* PORT is in network-byte order. */

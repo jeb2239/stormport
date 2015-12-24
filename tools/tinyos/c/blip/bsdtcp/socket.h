@@ -37,6 +37,7 @@
 //#include <sys/_types.h>
 //#include <sys/_iovec.h>
 //#include <machine/_align.h>
+#include "_types.h"
 
 /*
  * Definitions related to sockets: types, address families, options.
@@ -45,6 +46,8 @@
 /*
  * Data types.
  */
+
+//typedef __sa_family_t sa_family_t;
 
 #if __BSD_VISIBLE
 #ifndef _GID_T_DECLARED

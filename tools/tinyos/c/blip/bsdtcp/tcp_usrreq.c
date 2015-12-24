@@ -714,6 +714,9 @@ tcp_usr_abort(/*struct socket *so*/struct tcpcb* tp)
 		tcp_drop(tp, ECONNABORTED);
 //		TCPDEBUG2(PRU_ABORT);
 //		TCP_PROBE2(debug__user, tp, PRU_ABORT);
+	} else if (tp->t_state == TCPS_TIME_WAIT) { // This clause added by Sam
+	    tp = tcp_close(tp);
+		connection_lost(tp, CONN_LOST_NORMAL);
 	}
 #if 0	
 	if (!(inp->inp_flags & INP_DROPPED)) {
