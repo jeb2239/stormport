@@ -163,12 +163,12 @@ struct tcpcb {
 
 	u_long	snd_wnd;		/* send window */
 	u_long	snd_cwnd;		/* congestion-controlled window */
-	u_long	snd_spare1;		/* unused */
+//	u_long	snd_spare1;		/* unused */
 	u_long	snd_ssthresh;		/* snd_cwnd size threshold for
 					 * for slow start exponential to
 					 * linear switch
 					 */
-	u_long	snd_spare2;		/* unused */
+//	u_long	snd_spare2;		/* unused */
 	tcp_seq	snd_recover;		/* for use in NewReno Fast Recovery */
 
 	u_int	t_maxopd;		/* mss plus options */
@@ -178,8 +178,8 @@ struct tcpcb {
 	u_int	t_rtttime;		/* RTT measurement start time */
 	tcp_seq	t_rtseq;		/* sequence number being timed */
 
-	u_int	t_bw_spare1;		/* unused */
-	tcp_seq	t_bw_spare2;		/* unused */
+//	u_int	t_bw_spare1;		/* unused */
+//	tcp_seq	t_bw_spare2;		/* unused */
 
 	int	t_rxtcur;		/* current retransmit value (ticks) */
 	u_int	t_maxseg;		/* maximum segment size */
@@ -194,8 +194,8 @@ struct tcpcb {
 
 	int	t_softerror;		/* possible error not yet reported */
 /* out-of-band data */
-	char	t_oobflags;		/* have some */
-	char	t_iobc;			/* input character */
+//	char	t_oobflags;		/* have some */
+//	char	t_iobc;			/* input character */
 /* RFC 1323 variables */
 	u_char	snd_scale;		/* window scaling for send window */
 	u_char	rcv_scale;		/* window scaling for recv window */
@@ -229,8 +229,8 @@ struct tcpcb {
 	struct toedev	*tod;		/* toedev handling this connection */
 #endif
 	int	t_sndrexmitpack;	/* retransmit packets sent */
-	int	t_rcvoopack;		/* out-of-order packets received */
-	void	*t_toe;			/* TOE pcb pointer */
+//	int	t_rcvoopack;		/* out-of-order packets received */
+//	void	*t_toe;			/* TOE pcb pointer */
 	int	t_bytes_acked;		/* # bytes acked during current RTT */
 #if 0 // Ignore Congestion Control for now. Can add it in later.
 	struct cc_algo	*cc_algo;	/* congestion control algorithm */
@@ -244,14 +244,16 @@ struct tcpcb {
 	u_int	t_keepintvl;		/* interval between keepalives */
 	u_int	t_keepcnt;		/* number of keepalives before close */
 
+#if 0 // Don't support TCP Segment Offloading
 	u_int	t_tsomax;		/* TSO total burst length limit in bytes */
 	u_int	t_tsomaxsegcount;	/* TSO maximum segment count */
 	u_int	t_tsomaxsegsize;	/* TSO maximum segment size in bytes */
+#endif
 	u_int	t_pmtud_saved_maxopd;	/* pre-blackhole MSS */
 	u_int	t_flags2;		/* More tcpcb flags storage */
 
-	uint32_t t_ispare[8];		/* 5 UTO, 3 TBD */
-	void	*t_pspare2[4];		/* 1 TCP_SIGNATURE, 3 TBD */
+//	uint32_t t_ispare[8];		/* 5 UTO, 3 TBD */
+//	void	*t_pspare2[4];		/* 1 TCP_SIGNATURE, 3 TBD */
 #if 0
 #if defined(_KERNEL) && defined(TCPPCAP)
 	struct mbufq t_inpkts;		/* List of saved input packets. */
