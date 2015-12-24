@@ -38,6 +38,7 @@
 #include "version.h"
 #include "blip_printf.h"
 #include "interface.h"
+#include "driver.h"
 
 #define REPORT_PERIOD 60L
 extern void __bootstrap_payload(uint32_t base_addr);
@@ -420,11 +421,27 @@ implementation
                 //check for TCP callbacks
                 cb = call TCP_Driver.peek_callback();
                 if (cb != NULL) {
-                    simple_callback_t *c = (simple_callback_t*) cb;
-                    __inject_function1((void*)c->addr, c->r);
+                    tcp_lite_callback_t* c = (tcp_lite_callback_t*) cb;
+                    tcp_full_callback_t* cf;
+                    char v6addr[40];
+                    switch (c->type) {
+                        case SEND_READY:
+                        case RECV_READY:
+                            __inject_function1((void*) c->addr, c->r);
+                            break;
+                        case CONNECTION_LOST:
+                            __inject_function2((void*) c->addr, c->r, (uint32_t) c->arg0);
+                            break;
+                        case CONNECT_DONE:
+                        case ACCEPT_DONE:
+                            cf = (tcp_full_callback_t*) cb;
+                            inet_ntop6(&cf->src_address, v6addr, 40);
+                            __inject_function3((void*) cf->addr, cf->r, (((uint32_t) cf->arg0) << 16) | ((uint32_t) cf->src_port), (uint32_t) v6addr);
+                            break;
+                    }
                     procstate = procstate_runnable;
                     __syscall(KABI_RESUME_PROCESS);
-                    call Flash_Driver.pop_callback();
+                    call TCP_Driver.pop_callback();
                     return TRUE;
                 }
 
