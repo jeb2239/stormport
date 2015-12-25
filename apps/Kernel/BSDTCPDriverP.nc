@@ -240,7 +240,7 @@ module BSDTCPDriverP {
         if (pfd != -1) {
             passivesockets[pfd].readycbs = 0;
         }
-        return pfd;
+        return pfd + NUMSOCKETS;
     }
     
     bool active_isclosed(int ai) {
@@ -280,12 +280,11 @@ module BSDTCPDriverP {
         clear_passivesocket(pfd);
     }
     
-    inline bool check_fd(uint32_t fd, uint32_t* mask) {
+    inline int check_fd(uint32_t fd, uint32_t* mask) {
         return (*mask & (1 << fd));
     }
     
     int decode_fd(uint32_t rawfd, bool* passive) {
-        int index;
         if (rawfd >= NUMSOCKETS) {
             *passive = TRUE;
             rawfd -= NUMSOCKETS;
@@ -298,7 +297,7 @@ module BSDTCPDriverP {
                 return -1;
             }
         }
-        return index;
+        return (int) rawfd;
     }
     
     async command syscall_rv_t Driver.syscall_ex(uint32_t number, uint32_t arg0, uint32_t arg1, uint32_t arg2, uint32_t* argx) {
@@ -314,13 +313,13 @@ module BSDTCPDriverP {
         fd = decode_fd(arg0, &passive); // most syscalls need this info
         svc_id = number & 0xFF;
         switch (svc_id) {
-            case 0x00: // passivesocket
+            case 0x00: // passivesocket()
                 rv = (syscall_rv_t) alloc_pfd();
                 break;
-            case 0x01: // activesocket
+            case 0x01: // activesocket()
                 rv = (syscall_rv_t) alloc_afd();
                 break;
-            case 0x02: // bind
+            case 0x02: // bind(fd, lport)
                 if (fd < 0) {
                     break;
                 }
@@ -332,7 +331,7 @@ module BSDTCPDriverP {
                     printf("Bound active socket to port %d\n", arg1);
                 }
                 break;
-            case 0x03: // connect
+            case 0x03: // connect(fd, faddr, fport)
                 if (fd < 0 || passive) {
                     break;
                 }
@@ -344,7 +343,7 @@ module BSDTCPDriverP {
                 addr.sin6_port = htons((uint16_t) arg2);
                 rv = (syscall_rv_t) call BSDTCPActiveSocket.connect[fd](&addr);
                 break;
-            case 0x04: // listenaccept
+            case 0x04: // listenaccept(fd)
                 if (fd < 0 || !passive) {
                     break;
                 }
@@ -357,7 +356,7 @@ module BSDTCPDriverP {
                 call BSDTCPPassiveSocket.listenaccept[fd](call BSDTCPActiveSocket.getID[afd]());
                 printf("Accepting into socket %d\n", afd);
                 break;
-            case 0x05: // send
+            case 0x05: // send(fd, buffer, length, numbytes)
                 if (fd < 0 || passive) {
                     break;
                 }
@@ -365,7 +364,7 @@ module BSDTCPDriverP {
                 length = (size_t) arg2;
                 rv = (syscall_rv_t) call BSDTCPActiveSocket.send[fd](buffer, length, 0, (size_t*) argx[0]);
                 break;
-            case 0x06: // receive
+            case 0x06: // receive(fd, buffer, length, numbytes)
                 if (fd < 0 || passive) {
                     break;
                 }
@@ -373,14 +372,14 @@ module BSDTCPDriverP {
                 length = (size_t) arg2;
                 rv = (syscall_rv_t) call BSDTCPActiveSocket.receive[fd](buffer, length, (size_t*) argx[0]);
                 break;
-            case 0x07: // shutdown
+            case 0x07: // shutdown(fd, how)
                 if (fd < 0 || passive) {
                     break;
                 }
                 rv = (syscall_rv_t) call BSDTCPActiveSocket.shutdown[fd]((arg1 == SHUT_RD) || (arg1 == SHUT_RDWR),
                                                                          (arg1 == SHUT_WR) || (arg1 == SHUT_RDWR));
                 break;
-            case 0x08: // close
+            case 0x08: // close(fd)
                 if (fd < 0) {
                     break;
                 }
@@ -396,37 +395,37 @@ module BSDTCPDriverP {
                     dealloc_afd(fd);
                 }
                 break;
-            case 0x09: // abort
+            case 0x09: // abort(fd)
                 if (fd < 0 || passive) {
                     break;
                 }
                 rv = (syscall_rv_t) call BSDTCPActiveSocket.abort[fd]();
                 break;
-            case 0x0a: // set_connectDone_cb
+            case 0x0a: // set_connectDone_cb(fd, cb, r)
                 if (fd < 0 || passive) {
                     break;
                 }
                 tostore = (tcp_lite_callback_t*) &activesockets[fd].connectDone;
                 goto setcb;
-            case 0x0b: // set_sendReady_cb
+            case 0x0b: // set_sendReady_cb(fd, cb, r)
                 if (fd < 0 || passive) {
                     break;
                 }
                 tostore = &activesockets[fd].sendReady;
                 goto setcb;
-            case 0x0c: // set_recvReady_cb
+            case 0x0c: // set_recvReady_cb(fd, cb, r)
                 if (fd < 0 || passive) {
                     break;
                 }
                 tostore = &activesockets[fd].recvReady;
                 goto setcb;
-            case 0x0d: // set_connectionLost_cb
+            case 0x0d: // set_connectionLost_cb(fd, cb, r)
                 if (fd < 0 || passive) {
                     break;
                 }
                 tostore = &activesockets[fd].connectionLost;
                 goto setcb;
-            case 0x0e: // set_acceptDone_cb
+            case 0x0e: // set_acceptDone_cb(fd, cb, r)
                 if (fd < 0 || !passive) {
                     break;
                 }
