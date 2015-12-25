@@ -8,10 +8,10 @@ interface BSDTCPActiveSocket {
     event void connectDone(struct sockaddr_in6* addr);
     
     event void sendReady();
-    command error_t send(uint8_t* data, uint8_t length, int moretocome, size_t* bytessent);
+    command error_t send(uint8_t* data, uint32_t length, int moretocome, size_t* bytessent);
     
     event void receiveReady();
-    command error_t receive(uint8_t* buffer, uint8_t length, size_t* bytessent);
+    command error_t receive(uint8_t* buffer, uint32_t length, size_t* bytessent);
     
     event void connectionLost(uint8_t how);
     

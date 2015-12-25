@@ -204,11 +204,11 @@ module BSDTCPDriverP {
         return EBADF;
     }
     
-    default command error_t BSDTCPActiveSocket.send[uint8_t aundef](uint8_t* data, uint8_t length, int moretocome, size_t* bytessent) {
+    default command error_t BSDTCPActiveSocket.send[uint8_t aundef](uint8_t* data, uint32_t length, int moretocome, size_t* bytessent) {
         return EBADF;
     }
     
-    default command error_t BSDTCPActiveSocket.receive[uint8_t aundef](uint8_t* buffer, uint8_t length, size_t* bytessent) {
+    default command error_t BSDTCPActiveSocket.receive[uint8_t aundef](uint8_t* buffer, uint32_t length, size_t* bytessent) {
         return EBADF;
     }
     
