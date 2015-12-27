@@ -290,12 +290,12 @@ module BsdTcpP {
 
     /* Wrapper for underlying C code. */
     void send_message(struct tcpcb* tp, struct ip6_packet* msg, struct tcphdr* th, uint32_t tlen) {
-        char destaddr[100];
+        char destaddr[50];
         msg->ip6_hdr.ip6_vfc = IPV6_VERSION;
         call IPAddress.setSource(&msg->ip6_hdr);
         th->th_sum = 0; // should be zero already, but just in case
         th->th_sum = get_checksum(&msg->ip6_hdr.ip6_src, &msg->ip6_hdr.ip6_dst, th, tlen);
-        inet_ntop6(&msg->ip6_hdr.ip6_dst, destaddr, 100);
+        inet_ntop6(&msg->ip6_hdr.ip6_dst, destaddr, 50);
         printf("Sending message to %s\n", destaddr);
         printf("Return value: %d\n", call IP.send(msg));
     }

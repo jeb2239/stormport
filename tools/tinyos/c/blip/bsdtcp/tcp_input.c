@@ -1661,6 +1661,9 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 //				TCPSTAT_ADD(tcps_rcvackbyte, acked);
 //				sbdrop(&so->so_snd, acked);
 				cbuf_pop(tp->sendbuf, acked);
+				if (cbuf_free_space(tp->sendbuf) == acked && acked > 0) {
+				    *signals |= SIG_SENDBUF_NOTFULL;
+				}
 				if (SEQ_GT(tp->snd_una, tp->snd_recover) &&
 				    SEQ_LEQ(th->th_ack, tp->snd_recover))
 					tp->snd_recover = th->th_ack - 1;
