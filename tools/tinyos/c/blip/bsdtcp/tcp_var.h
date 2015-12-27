@@ -223,7 +223,9 @@ struct tcpcb {
 	tcp_seq sack_newdata;		/* New data xmitted in this recovery
 					   episode starts at this seq number */
 	struct sackhint	sackhint;	/* SACK scoreboard hint */
+#endif
 	int	t_rttlow;		/* smallest observerved RTT */
+#if 0
 	u_int32_t	rfbuf_ts;	/* recv buffer autoscaling timestamp */
 	int	rfbuf_cnt;		/* recv buffer autoscaling byte count */
 	struct toedev	*tod;		/* toedev handling this connection */

@@ -96,6 +96,7 @@ static void
 tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
     struct tcpcb *tp, int drop_hdrlen, int tlen, uint8_t iptos,
     uint8_t* signals);
+static void	 tcp_xmit_timer(struct tcpcb *, int);
 
 /*
  * Issue RST and make ACK acceptable to originator of segment.
@@ -1633,7 +1634,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				 * timestamps of 0 or we could calculate a
 				 * huge RTT and blow up the retransmit timer.
 				 */
-#if 0 // Don't estimate RTT yet
+/* // Don't use TCP timestamps
 				if ((to.to_flags & TOF_TS) != 0 &&
 				    to.to_tsecr) {
 					u_int t;
@@ -1643,7 +1644,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 						tp->t_rttlow = t;
 					tcp_xmit_timer(tp,
 					    TCP_TS_TO_TICKS(t) + 1);
-				} else if (tp->t_rtttime &&
+				} else*/ if (tp->t_rtttime &&
 				    SEQ_GT(th->th_ack, tp->t_rtseq)) {
 					if (!tp->t_rttlow ||
 					    tp->t_rttlow > ticks - tp->t_rtttime)
@@ -1651,7 +1652,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 					tcp_xmit_timer(tp,
 							ticks - tp->t_rtttime);
 				}
-#endif
+
 				acked = BYTES_THIS_ACK(tp, th);
 
 				/* Run HHOOK_TCP_ESTABLISHED_IN helper hooks. */
@@ -2657,7 +2658,7 @@ process_ACK:
 		 * timestamps of 0 or we could calculate a
 		 * huge RTT and blow up the retransmit timer.
 		 */
-#if 0
+/*
 		if ((to.to_flags & TOF_TS) != 0 && to.to_tsecr) {
 			u_int t;
 
@@ -2665,12 +2666,12 @@ process_ACK:
 			if (!tp->t_rttlow || tp->t_rttlow > t)
 				tp->t_rttlow = t;
 			tcp_xmit_timer(tp, TCP_TS_TO_TICKS(t) + 1);
-		} else if (tp->t_rtttime && SEQ_GT(th->th_ack, tp->t_rtseq)) {
+		} else*/ if (tp->t_rtttime && SEQ_GT(th->th_ack, tp->t_rtseq)) {
 			if (!tp->t_rttlow || tp->t_rttlow > ticks - tp->t_rtttime)
 				tp->t_rttlow = ticks - tp->t_rtttime;
 			tcp_xmit_timer(tp, ticks - tp->t_rtttime);
 		}
-#endif
+
 		/*
 		 * If all outstanding data is acked, stop retransmit
 		 * timer and remember to restart (more output or persist).
@@ -3150,5 +3151,86 @@ drop:
 		INP_WUNLOCK(tp->t_inpcb);
 	m_freem(m);
 #endif
+}
+
+/*
+ * Collect new round-trip time estimate
+ * and update averages and current timeout.
+ */
+static void
+tcp_xmit_timer(struct tcpcb *tp, int rtt)
+{
+	int delta;
+
+//	INP_WLOCK_ASSERT(tp->t_inpcb);
+
+//	TCPSTAT_INC(tcps_rttupdated);
+	tp->t_rttupdated++;
+	if (tp->t_srtt != 0) {
+		/*
+		 * srtt is stored as fixed point with 5 bits after the
+		 * binary point (i.e., scaled by 8).  The following magic
+		 * is equivalent to the smoothing algorithm in rfc793 with
+		 * an alpha of .875 (srtt = rtt/8 + srtt*7/8 in fixed
+		 * point).  Adjust rtt to origin 0.
+		 */
+		delta = ((rtt - 1) << TCP_DELTA_SHIFT)
+			- (tp->t_srtt >> (TCP_RTT_SHIFT - TCP_DELTA_SHIFT));
+
+		if ((tp->t_srtt += delta) <= 0)
+			tp->t_srtt = 1;
+
+		/*
+		 * We accumulate a smoothed rtt variance (actually, a
+		 * smoothed mean difference), then set the retransmit
+		 * timer to smoothed rtt + 4 times the smoothed variance.
+		 * rttvar is stored as fixed point with 4 bits after the
+		 * binary point (scaled by 16).  The following is
+		 * equivalent to rfc793 smoothing with an alpha of .75
+		 * (rttvar = rttvar*3/4 + |delta| / 4).  This replaces
+		 * rfc793's wired-in beta.
+		 */
+		if (delta < 0)
+			delta = -delta;
+		delta -= tp->t_rttvar >> (TCP_RTTVAR_SHIFT - TCP_DELTA_SHIFT);
+		if ((tp->t_rttvar += delta) <= 0)
+			tp->t_rttvar = 1;
+		if (tp->t_rttbest > tp->t_srtt + tp->t_rttvar)
+		    tp->t_rttbest = tp->t_srtt + tp->t_rttvar;
+	} else {
+		/*
+		 * No rtt measurement yet - use the unsmoothed rtt.
+		 * Set the variance to half the rtt (so our first
+		 * retransmit happens at 3*rtt).
+		 */
+		tp->t_srtt = rtt << TCP_RTT_SHIFT;
+		tp->t_rttvar = rtt << (TCP_RTTVAR_SHIFT - 1);
+		tp->t_rttbest = tp->t_srtt + tp->t_rttvar;
+	}
+	tp->t_rtttime = 0;
+	tp->t_rxtshift = 0;
+
+	/*
+	 * the retransmit should happen at rtt + 4 * rttvar.
+	 * Because of the way we do the smoothing, srtt and rttvar
+	 * will each average +1/2 tick of bias.  When we compute
+	 * the retransmit timer, we want 1/2 tick of rounding and
+	 * 1 extra tick because of +-1/2 tick uncertainty in the
+	 * firing of the timer.  The bias will give us exactly the
+	 * 1.5 tick we need.  But, because the bias is
+	 * statistical, we have to test that we don't drop below
+	 * the minimum feasible timer (which is 2 ticks).
+	 */
+	TCPT_RANGESET(tp->t_rxtcur, TCP_REXMTVAL(tp),
+		      max(tp->t_rttmin, rtt + 2), TCPTV_REXMTMAX);
+
+	/*
+	 * We received an ack for a packet that wasn't retransmitted;
+	 * it is probably safe to discard any error indications we've
+	 * received recently.  This isn't quite right, but close enough
+	 * for now (a route might have failed after we sent a segment,
+	 * and the return path might not be symmetrical).
+	 */
+	tp->t_softerror = 0;
 }
 
