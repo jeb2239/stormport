@@ -75,11 +75,12 @@
 #define TT_KEEP		0x0008
 #define TT_2MSL		0x0010
 
-// To interface with TinyOS, each timer must take up only 2 bits
-#define	TOS_REXMT	0x0
-#define	TOS_PERSIST	0x1
-#define	TOS_KEEP	0x2
-#define TOS_2MSL	0x3
+// To interface with TinyOS, each timer must take up only 3 bits
+#define TOS_DELACK	0x0
+#define	TOS_REXMT	0x1
+#define	TOS_PERSIST	0x2
+#define	TOS_KEEP	0x3
+#define TOS_2MSL	0x4
 
 /*
  * Time constants.

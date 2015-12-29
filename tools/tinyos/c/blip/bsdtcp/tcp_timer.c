@@ -41,13 +41,53 @@ int V_tcp_pmtud_blackhole_activated_min_mss = 0;
 int tcp_rexmit_drop_options = 1; // drop options after a few retransmits
 int always_keepalive = 1;
 
+/*
+ * TCP timer processing.
+ */
+
+void
+tcp_timer_delack(/*void *xtp*/struct tcpcb* tp)
+{
+	tp->activetimers &= ~TT_DELACK;
+#if 0
+	struct tcpcb *tp = xtp;
+	struct inpcb *inp;
+	CURVNET_SET(tp->t_vnet);
+
+	inp = tp->t_inpcb;
+	KASSERT(inp != NULL, ("%s: tp %p tp->t_inpcb == NULL", __func__, tp));
+	INP_WLOCK(inp);
+	if (callout_pending(&tp->t_timers->tt_delack) ||
+	    !callout_active(&tp->t_timers->tt_delack)) {
+		INP_WUNLOCK(inp);
+		CURVNET_RESTORE();
+		return;
+	}
+	callout_deactivate(&tp->t_timers->tt_delack);
+	if ((inp->inp_flags & INP_DROPPED) != 0) {
+		INP_WUNLOCK(inp);
+		CURVNET_RESTORE();
+		return;
+	}
+	KASSERT((tp->t_timers->tt_flags & TT_STOPPED) == 0,
+		("%s: tp %p tcpcb can't be stopped here", __func__, tp));
+	KASSERT((tp->t_timers->tt_flags & TT_DELACK) != 0,
+		("%s: tp %p delack callout should be running", __func__, tp));
+#endif
+	tp->t_flags |= TF_ACKNOW;
+//	TCPSTAT_INC(tcps_delack);
+	(void) tcp_output(tp);
+//	INP_WUNLOCK(inp);
+//	CURVNET_RESTORE();
+}
+
 void
 tcp_timer_keep(struct tcpcb* tp)
 {
     uint32_t ticks = get_ticks();
 	struct tcptemp *t_template;
 	tp->activetimers &= ~TT_KEEP; // for our own internal bookkeeping
-#if 0
+#if 0 // I already cancel this invocation if it was rescheduled meanwhile
 	struct inpcb *inp;
 	CURVNET_SET(tp->t_vnet);
 #ifdef TCPDEBUG
@@ -617,6 +657,9 @@ void
 tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta) {
 	uint8_t tos_timer;
 	switch (timer_type) {
+	case TT_DELACK:
+		tos_timer = TOS_DELACK;
+		break;
 	case TT_REXMT:
 		tos_timer = TOS_REXMT;
 		break;
@@ -644,6 +687,7 @@ tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta) {
 
 void
 tcp_cancel_timers(struct tcpcb* tp) {
+	stop_timer(tp, TOS_DELACK);
     stop_timer(tp, TOS_REXMT);
     stop_timer(tp, TOS_PERSIST);
     stop_timer(tp, TOS_KEEP);

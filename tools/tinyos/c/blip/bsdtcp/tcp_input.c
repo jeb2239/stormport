@@ -83,12 +83,13 @@ const int V_drop_synfin = 0;
 // My own constant
 #define RELOOKUP_REQUIRED -1
 
-// I may turn on some of these flags later
+// I may change some of these flags later
 int V_tcp_do_ecn = 0;
 int V_tcp_do_rfc3042 = 0;
 int tcp_fast_finwait2_recycle = 0;
 const int V_tcp_do_sack = 0;
 const int V_path_mtu_discovery = 0;
+const int V_tcp_delack_enabled = 1;
 
 // Copied from sys/libkern.h
 static int imax(int a, int b) { return (a > b ? a : b); }
@@ -100,6 +101,23 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
     struct tcpcb *tp, int drop_hdrlen, int tlen, uint8_t iptos,
     uint8_t* signals);
 static void	 tcp_xmit_timer(struct tcpcb *, int);
+
+/*
+ * Indicate whether this ack should be delayed.  We can delay the ack if
+ * following conditions are met:
+ *	- There is no delayed ack timer in progress.
+ *	- Our last ack wasn't a 0-sized window. We never want to delay
+ *	  the ack that opens up a 0-sized window.
+ *	- LRO wasn't used for this segment. We make sure by checking that the
+ *	  segment size is not larger than the MSS.
+ *	- Delayed acks are enabled or this is a half-synchronized T/TCP
+ *	  connection.
+ */
+#define DELAY_ACK(tp, tlen)						\
+	((!tcp_timer_active(tp, TT_DELACK) &&				\
+	    (tp->t_flags & TF_RXWIN0SENT) == 0) &&			\
+	    (tlen <= tp->t_maxopd) &&					\
+	    (V_tcp_delack_enabled || (tp->t_flags & TF_NEEDSYN)))
 
 /*
  * External function: look up an entry in the hostcache and fill out the
@@ -1789,12 +1807,12 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 //			}
 			/* NB: sorwakeup_locked() does an implicit unlock. */
 //			sorwakeup_locked(so);
-/*			if (DELAY_ACK(tp, tlen)) { // DON'T DELAY ACKNOWLEDGEMENTS
+			if (DELAY_ACK(tp, tlen)) {
 				tp->t_flags |= TF_DELACK;
-			} else {*/
+			} else {
 				tp->t_flags |= TF_ACKNOW;
 				tcp_output(tp);
-//			}
+			}
 			goto check_delack;
 		}
 	}
@@ -1889,12 +1907,10 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			 * If there's data, delay ACK; if there's also a FIN
 			 * ACKNOW will be turned on later.
 			 */
-#if 0
 			if (DELAY_ACK(tp, tlen) && tlen != 0)
 				tcp_timer_activate(tp, TT_DELACK,
 				    tcp_delacktime);
 			else
-#endif
 				tp->t_flags |= TF_ACKNOW;
 
 			if ((thflags & TH_ECE) && V_tcp_do_ecn) {
@@ -2875,9 +2891,9 @@ dodata:							/* XXX */
 		if (th->th_seq == tp->rcv_nxt &&
 		    /*LIST_EMPTY(&tp->t_segq) &&*/ // NO SACK
 		    TCPS_HAVEESTABLISHED(tp->t_state)) {
-//			if (DELAY_ACK(tp, tlen))
-//				tp->t_flags |= TF_DELACK;
-//			else
+			if (DELAY_ACK(tp, tlen))
+				tp->t_flags |= TF_DELACK;
+			else
 				tp->t_flags |= TF_ACKNOW;
 			tp->rcv_nxt += tlen;
 			thflags = th->th_flags & TH_FIN;
@@ -2944,9 +2960,9 @@ dodata:							/* XXX */
 			 * Otherwise, since we received a FIN then no
 			 * more input can be expected, send ACK now.
 			 */
-//			if (tp->t_flags & TF_NEEDSYN)
-//				tp->t_flags |= TF_DELACK;
-//			else
+			if (tp->t_flags & TF_NEEDSYN)
+				tp->t_flags |= TF_DELACK;
+			else
 				tp->t_flags |= TF_ACKNOW;
 			tp->rcv_nxt++;
 		}
