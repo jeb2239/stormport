@@ -1209,7 +1209,6 @@ send:
 	 * Put TCP length in extended header, and then
 	 * checksum extended header and data.
 	 */
-	 // TODO Calculate checksum correctly
 	//m->m_pkthdr.len = hdrlen + len; /* in6_cksum() need this */
 	//m->m_pkthdr.csum_data = offsetof(struct tcphdr, th_sum);
 //#ifdef INET6
