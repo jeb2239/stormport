@@ -1145,7 +1145,7 @@ relocked:
 		tp->fport = th->th_sport;
 		tp->lport = tpl->lport;
 		
-		tp->t_flags = (TF_NOPUSH | TF_NODELAY | (tp->t_flags & TF_NOOPT));
+		tp->t_flags = tp->t_flags & (TF_NOPUSH | TF_NODELAY | TF_NOOPT);
 //		tp->t_flags = sototcpcb(lso)->t_flags & (TF_NOPUSH|TF_NODELAY);
 //		if (sc->sc_flags & SCF_NOOPT)
 //			tp->t_flags |= TF_NOOPT;
@@ -2561,7 +2561,6 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			 * increment snd_una for ACK of SYN, and check if
 			 * we can do window scaling.
 			 */
-			printf("Fully synchronized now!\n");
 			tp->t_flags &= ~TF_NEEDSYN;
 			tp->snd_una++;
 			/* Do window scaling? */

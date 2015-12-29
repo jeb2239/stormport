@@ -250,7 +250,6 @@ after_sack_rexmit:
 	 * and go to transmit state.
 	 */
 	if (tp->t_flags & TF_FORCEDATA) {
-		printf("Force data: sendwin is %d, without cc %d\n", sendwin, tp->snd_wnd);
 		if (sendwin == 0) {
 			/*
 			 * If we still have some data to send, then
@@ -372,11 +371,10 @@ after_sack_rexmit:
 			(off < (int) /*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf))) {
 			tcp_timer_activate(tp, TT_REXMT, 0);
 			tp->t_rxtshift = 0;
-			printf("output unack: Setting tp->snd_nxt from %d to %d\n", tp->snd_nxt, tp->snd_una);
 			tp->snd_nxt = tp->snd_una;
 			if (!tcp_timer_active(tp, TT_PERSIST)) {
-			    printf("Setting persist: 375\n");
-				tcp_setpersist(tp);}
+				tcp_setpersist(tp);
+			}
 		}
 	}
 	
@@ -1427,7 +1425,6 @@ out:
 		}
 		if (sack_rxmit)
 			goto timer;
-		printf("output: incrementing tp->snd_nxt from %d to %d\n", tp->snd_nxt, tp->snd_nxt + len);
 		tp->snd_nxt += len;
 		if (SEQ_GT(tp->snd_nxt, tp->snd_max)) {
 			tp->snd_max = tp->snd_nxt;
@@ -1554,7 +1551,6 @@ timer:
 			if (tso)
 				tp->t_flags &= ~TF_TSO;
 #endif
-			printf("MTU size changed\n");
 			if (mtu != 0) {
 				tcp_mss_update(tp, -1, mtu, NULL, NULL);
 				goto again;
