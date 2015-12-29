@@ -38,10 +38,6 @@
 #include "socket.h"
 #include "ip6.h"
 
-/* For compatibility between BSD's in6_addr struct and TinyOS's in6_addr struct. */
-#define __u6_addr in6_u
-#define __u6_addr32 u6_addr32
-
 static void	tcp_disconnect(struct tcpcb *);
 static void	tcp_usrclosed(struct tcpcb *);
 

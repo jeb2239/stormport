@@ -62,7 +62,7 @@
 	(tp)->snd_una = (tp)->snd_nxt = (tp)->snd_max = (tp)->snd_up = \
 	    (tp)->snd_recover = (tp)->iss
 
-#ifdef _KERNEL
+//#ifdef _KERNEL
 /*
  * Clock macros for RFC 1323 timestamps.
  */
@@ -78,6 +78,7 @@
 static __inline u_int
 tcp_ts_getticks(void)
 {
+#if 0 // I don't have "getmicrouptime"
 	struct timeval tv;
 	u_long ms;
 
@@ -89,7 +90,9 @@ tcp_ts_getticks(void)
 	ms = tv.tv_sec * 1000 + tv.tv_usec / 1000;
 
 	return (ms);
+#endif
+	return get_millis();
 }
-#endif /* _KERNEL */
+//#endif /* _KERNEL */
 
 #endif /* _NETINET_TCP_SEQ_H_ */

@@ -6,6 +6,8 @@
 #define hz 10 // number of ticks per second
 #define MILLIS_PER_TICK 100 // number of milliseconds per tick
 
+#define FRAGLIMIT_6LOWPAN 127 // Fragmentation limit, excluding IP and TCP headers
+
 module BsdTcpP {
 
     provides {
@@ -30,6 +32,7 @@ module BsdTcpP {
     #define CONN_LOST_NORMAL 0 // errno of 0 means that the connection closed gracefully
 
     uint32_t get_ticks();
+    uint32_t get_millis();
     void send_message(struct tcpcb* tp, struct ip6_packet* msg, struct tcphdr* th, uint32_t tlen);
     void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay);
     void stop_timer(struct tcpcb* tcb, uint8_t timer_id);
@@ -39,9 +42,7 @@ module BsdTcpP {
     
 #include <bsdtcp/tcp_subr.c>
 #include <bsdtcp/tcp_output.c>
-
 #include <bsdtcp/tcp_input.c>
-
 #include <bsdtcp/tcp_timer.c>
 #include <bsdtcp/tcp_timewait.c>
 #include <bsdtcp/tcp_usrreq.c>
@@ -302,6 +303,10 @@ module BsdTcpP {
     
     uint32_t get_ticks() {
         return ticks;
+    }
+    
+    uint32_t get_millis() {
+    	return call TickTimer.getNow();
     }
     
     void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay) {

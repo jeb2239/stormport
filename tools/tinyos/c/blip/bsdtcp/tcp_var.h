@@ -403,6 +403,7 @@ struct tcp_ifcap {
 	u_int	tsomaxsegsize;
 };
 
+void	 tcp_mss(struct tcpcb *, int);
 void	 tcp_mss_update(struct tcpcb *, int, int, struct hc_metrics_lite *,
 	    struct tcp_ifcap *);
 
@@ -611,6 +612,9 @@ int	 tcp_output(struct tcpcb *);
 struct tcptemp *
 	 tcpip_maketemplate(struct /*inp*/tcpcb *);
 void	 tcpip_fillheaders(struct /*inp*/tcpcb *, void *, void *);
+u_long	 tcp_maxmtu6(/*struct in_conninfo **/ struct tcpcb*, struct tcp_ifcap *);
+int	 tcp_addoptions(struct tcpopt *, u_char *);
+int	 tcp_mssopt(/*struct in_conninfo **/ struct tcpcb*);
 
 #define	tcps_rcvmemdrop	tcps_rcvreassfull	/* compat */
 

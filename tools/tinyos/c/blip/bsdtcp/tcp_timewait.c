@@ -57,11 +57,29 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 	struct ip6_hdr* ip6;
 	struct tcphdr* nth;
 	struct ip_iovec* iov;
+	struct tcpopt to;
 	u_int optlen = 0;
-	int alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + sizeof(struct ip_iovec);
-	char* bufreal = ip_malloc(alen + 3);
+	u_char opt[TCP_MAXOLEN];
+	int alen;
+	char* bufreal;
 	int win = 0;
 	char* buf;
+	
+	to.to_flags = 0;
+
+	/*
+	 * Send a timestamp and echo-reply if both our side and our peer
+	 * have sent timestamps in our SYN's and this is not a RST.
+	 */
+	if (/*tw->t_recent*/(tp->t_flags & TF_RCVD_TSTMP) && flags == TH_ACK) {
+		to.to_flags |= TOF_TS;
+		to.to_tsval = tcp_ts_getticks() + /*tw->ts_offset*/tp->ts_offset;
+		to.to_tsecr = /*tw->t_recent*/tp->ts_recent;
+	}
+	optlen = tcp_addoptions(&to, opt);
+	
+	alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + optlen + sizeof(struct ip_iovec);
+	bufreal = ip_malloc(alen + 3);
 	if (bufreal == NULL) {
 		return 0; // drop the message
 	}
@@ -77,12 +95,12 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 	msg = (struct ip6_packet*) buf;
   	iov = (struct ip_iovec*) (buf + alen - sizeof(struct ip_iovec));
   	iov->iov_next = NULL;
-	iov->iov_len = sizeof(struct tcphdr);
+	iov->iov_len = sizeof(struct tcphdr) + optlen;
 	iov->iov_base = (void*) (msg + 1);
 	msg->ip6_data = iov;
 	ip6 = &msg->ip6_hdr;
 	ip6->ip6_nxt = IANA_TCP;
-	ip6->ip6_plen = htons(sizeof(struct tcphdr));
+	ip6->ip6_plen = htons(sizeof(struct tcphdr) + optlen);
 	ip6->ip6_dst = tp->faddr;
 	nth = (struct tcphdr*) (ip6 + 1);
 	nth->th_sport = tp->lport;
@@ -94,7 +112,10 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 	nth->th_flags = flags;
 	nth->th_win = htons(tp->tw_last_win);
 	nth->th_urp = 0;
-	send_message(tp, msg, nth, sizeof(struct tcphdr));
+	
+	memcpy(nth + 1, opt, optlen);
+	
+	send_message(tp, msg, nth, sizeof(struct tcphdr) + optlen);
 	ip_free(bufreal);
 	
 	return 0;

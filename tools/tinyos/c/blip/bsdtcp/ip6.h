@@ -119,6 +119,33 @@ struct ip6_hdr {
 #define IN6_IS_ADDR_MULTICAST(a)	((a)->s6_addr[0] == 0xff)
 
 /*
+ * Unspecified
+ */
+#define IN6_IS_ADDR_UNSPECIFIED(a)	\
+	((a)->__u6_addr.__u6_addr32[0] == 0 &&	\
+	 (a)->__u6_addr.__u6_addr32[1] == 0 &&	\
+	 (a)->__u6_addr.__u6_addr32[2] == 0 &&	\
+	 (a)->__u6_addr.__u6_addr32[3] == 0)
+
+/*
+ * Loopback
+ */
+#define IN6_IS_ADDR_LOOPBACK(a)		\
+	((a)->__u6_addr.__u6_addr32[0] == 0 &&	\
+	 (a)->__u6_addr.__u6_addr32[1] == 0 &&	\
+	 (a)->__u6_addr.__u6_addr32[2] == 0 &&	\
+	 (a)->__u6_addr.__u6_addr32[3] == ntohl(1))
+	 
+/*
+ * Unicast Scope
+ * Note that we must check topmost 10 bits only, not 16 bits (see RFC2373).
+ */
+#define IN6_IS_ADDR_LINKLOCAL(a)	\
+	(((a)->s6_addr[0] == 0xfe) && (((a)->s6_addr[1] & 0xc0) == 0x80))
+#define IN6_IS_ADDR_SITELOCAL(a)	\
+	(((a)->s6_addr[0] == 0xfe) && (((a)->s6_addr[1] & 0xc0) == 0xc0))
+
+/*
  * Mapped
  */
 
@@ -127,6 +154,10 @@ struct ip6_hdr {
 	 (a)->__u6_addr.__u6_addr32[1] == 0 &&	\
 	 (a)->__u6_addr.__u6_addr32[2] == ntohl(0x0000ffff))
 
+
+/* For compatibility between BSD's in6_addr struct and TinyOS's in6_addr struct. */
+#define __u6_addr in6_u
+#define __u6_addr32 u6_addr32
 
 /*
  * Extension Headers

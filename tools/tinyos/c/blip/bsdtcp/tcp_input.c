@@ -87,16 +87,95 @@ const int V_drop_synfin = 0;
 int V_tcp_do_ecn = 0;
 int V_tcp_do_rfc3042 = 0;
 int tcp_fast_finwait2_recycle = 0;
+const int V_tcp_do_sack = 0;
+const int V_path_mtu_discovery = 0;
 
 // Copied from sys/libkern.h
 static int imax(int a, int b) { return (a > b ? a : b); }
 static int imin(int a, int b) { return (a < b ? a : b); }
 
+static void	 tcp_dooptions(struct tcpopt *, u_char *, int, int);
 static void
 tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
     struct tcpcb *tp, int drop_hdrlen, int tlen, uint8_t iptos,
     uint8_t* signals);
 static void	 tcp_xmit_timer(struct tcpcb *, int);
+
+/*
+ * External function: look up an entry in the hostcache and fill out the
+ * supplied TCP metrics structure.  Fills in NULL when no entry was found or
+ * a value is not set.
+ * Taken from tcp_hostcache.c.
+ * Sam: I changed this to always act as if there is a miss.
+ */
+void
+tcp_hc_get(/*struct in_conninfo *inc*/ struct tcpcb* tp, struct hc_metrics_lite *hc_metrics_lite)
+{
+#if 0
+	struct hc_metrics *hc_entry;
+
+	/*
+	 * Find the right bucket.
+	 */
+	hc_entry = tcp_hc_lookup(inc);
+
+	/*
+	 * If we don't have an existing object.
+	 */
+	if (hc_entry == NULL) {
+#endif
+		bzero(hc_metrics_lite, sizeof(*hc_metrics_lite));
+#if 0
+		return;
+	}
+	hc_entry->rmx_hits++;
+	hc_entry->rmx_expire = V_tcp_hostcache.expire; /* start over again */
+
+	hc_metrics_lite->rmx_mtu = hc_entry->rmx_mtu;
+	hc_metrics_lite->rmx_ssthresh = hc_entry->rmx_ssthresh;
+	hc_metrics_lite->rmx_rtt = hc_entry->rmx_rtt;
+	hc_metrics_lite->rmx_rttvar = hc_entry->rmx_rttvar;
+	hc_metrics_lite->rmx_bandwidth = hc_entry->rmx_bandwidth;
+	hc_metrics_lite->rmx_cwnd = hc_entry->rmx_cwnd;
+	hc_metrics_lite->rmx_sendpipe = hc_entry->rmx_sendpipe;
+	hc_metrics_lite->rmx_recvpipe = hc_entry->rmx_recvpipe;
+
+	/*
+	 * Unlock bucket row.
+	 */
+	THC_UNLOCK(&hc_entry->rmx_head->hch_mtx);
+#endif
+}
+
+/*
+ * External function: look up an entry in the hostcache and return the
+ * discovered path MTU.  Returns NULL if no entry is found or value is not
+ * set.
+ * Taken from tcp_hostcache.c.
+ * Sam: I changed this always act as if there is a miss.
+ */
+u_long
+tcp_hc_getmtu(/*struct in_conninfo *inc*/ struct tcpcb* tp)
+{
+#if 0
+	struct hc_metrics *hc_entry;
+	u_long mtu;
+
+	hc_entry = tcp_hc_lookup(inc);
+	if (hc_entry == NULL) {
+#endif
+		return 0;
+#if 0
+	}
+	hc_entry->rmx_hits++;
+	hc_entry->rmx_expire = V_tcp_hostcache.expire; /* start over again */
+
+	mtu = hc_entry->rmx_mtu;
+	THC_UNLOCK(&hc_entry->rmx_head->hch_mtx);
+	return mtu;
+#endif
+}
+
 
 /*
  * Issue RST and make ACK acceptable to originator of segment.
@@ -172,177 +251,6 @@ drop:
 */
 }
 
-void
-tcp_mss_update(struct tcpcb *tp, int offer, int mtuoffer,
-    struct hc_metrics_lite *metricptr, struct tcp_ifcap *cap)
-{
-#if 0
-	int mss = 0;
-	u_long maxmtu = 0;
-	struct inpcb *inp = tp->t_inpcb;
-	struct hc_metrics_lite metrics;
-	int origoffer;
-#ifdef INET6
-	int isipv6 = ((inp->inp_vflag & INP_IPV6) != 0) ? 1 : 0;
-	size_t min_protoh = isipv6 ?
-			    sizeof (struct ip6_hdr) + sizeof (struct tcphdr) :
-			    sizeof (struct tcpiphdr);
-#else
-	const size_t min_protoh = sizeof(struct tcpiphdr);
-#endif
-
-	INP_WLOCK_ASSERT(tp->t_inpcb);
-
-	if (mtuoffer != -1) {
-		KASSERT(offer == -1, ("%s: conflict", __func__));
-		offer = mtuoffer - min_protoh;
-	}
-	origoffer = offer;
-
-	/* Initialize. */
-//#ifdef INET6
-	if (isipv6) {
-		maxmtu = tcp_maxmtu6(&inp->inp_inc, cap);
-		tp->t_maxopd = tp->t_maxseg = V_tcp_v6mssdflt;
-	}
-//#endif
-#if 0 // We're IPv6
-#if defined(INET) && defined(INET6)
-	else
-#endif
-#ifdef INET
-	{
-		maxmtu = tcp_maxmtu(&inp->inp_inc, cap);
-		tp->t_maxopd = tp->t_maxseg = V_tcp_mssdflt;
-	}
-#endif
-#endif
-	/*
-	 * No route to sender, stay with default mss and return.
-	 */
-	if (maxmtu == 0) {
-#endif
-		// ALWAYS BEHAVE LIKE A CACHE MISS. I DON'T WANT TO SPEND MEMORY ON THIS.
-		/*
-		 * In case we return early we need to initialize metrics
-		 * to a defined state as tcp_hc_get() would do for us
-		 * if there was no cache hit.
-		 */
-		if (metricptr != NULL)
-			bzero(metricptr, sizeof(struct hc_metrics_lite));
-		return;
-#if 0
-	}
-
-	/* What have we got? */
-	switch (offer) {
-		case 0:
-			/*
-			 * Offer == 0 means that there was no MSS on the SYN
-			 * segment, in this case we use tcp_mssdflt as
-			 * already assigned to t_maxopd above.
-			 */
-			offer = tp->t_maxopd;
-			break;
-
-		case -1:
-			/*
-			 * Offer == -1 means that we didn't receive SYN yet.
-			 */
-			/* FALLTHROUGH */
-
-		default:
-			/*
-			 * Prevent DoS attack with too small MSS. Round up
-			 * to at least minmss.
-			 */
-			offer = max(offer, V_tcp_minmss);
-	}
-
-	/*
-	 * rmx information is now retrieved from tcp_hostcache.
-	 */
-	tcp_hc_get(&inp->inp_inc, &metrics);
-	if (metricptr != NULL)
-		bcopy(&metrics, metricptr, sizeof(struct hc_metrics_lite));
-
-	/*
-	 * If there's a discovered mtu in tcp hostcache, use it.
-	 * Else, use the link mtu.
-	 */
-	if (metrics.rmx_mtu)
-		mss = min(metrics.rmx_mtu, maxmtu) - min_protoh;
-	else {
-#ifdef INET6
-		if (isipv6) {
-			mss = maxmtu - min_protoh;
-			if (!V_path_mtu_discovery &&
-			    !in6_localaddr(&inp->in6p_faddr))
-				mss = min(mss, V_tcp_v6mssdflt);
-		}
-#endif
-#if defined(INET) && defined(INET6)
-		else
-#endif
-#ifdef INET
-		{
-			mss = maxmtu - min_protoh;
-			if (!V_path_mtu_discovery &&
-			    !in_localaddr(inp->inp_faddr))
-				mss = min(mss, V_tcp_mssdflt);
-		}
-#endif
-		/*
-		 * XXX - The above conditional (mss = maxmtu - min_protoh)
-		 * probably violates the TCP spec.
-		 * The problem is that, since we don't know the
-		 * other end's MSS, we are supposed to use a conservative
-		 * default.  But, if we do that, then MTU discovery will
-		 * never actually take place, because the conservative
-		 * default is much less than the MTUs typically seen
-		 * on the Internet today.  For the moment, we'll sweep
-		 * this under the carpet.
-		 *
-		 * The conservative default might not actually be a problem
-		 * if the only case this occurs is when sending an initial
-		 * SYN with options and data to a host we've never talked
-		 * to before.  Then, they will reply with an MSS value which
-		 * will get recorded and the new parameters should get
-		 * recomputed.  For Further Study.
-		 */
-	}
-	mss = min(mss, offer);
-
-	/*
-	 * Sanity check: make sure that maxopd will be large
-	 * enough to allow some data on segments even if the
-	 * all the option space is used (40bytes).  Otherwise
-	 * funny things may happen in tcp_output.
-	 */
-	mss = max(mss, 64);
-
-	/*
-	 * maxopd stores the maximum length of data AND options
-	 * in a segment; maxseg is the amount of data in a normal
-	 * segment.  We need to store this value (maxopd) apart
-	 * from maxseg, because now every segment carries options
-	 * and thus we normally have somewhat less data in segments.
-	 */
-	tp->t_maxopd = mss;
-
-	/*
-	 * origoffer==-1 indicates that no segments were received yet.
-	 * In this case we just guess.
-	 */
-	if ((tp->t_flags & (TF_REQ_TSTMP|TF_NOOPT)) == TF_REQ_TSTMP &&
-	    (origoffer == -1 ||
-	     (tp->t_flags & TF_RCVD_TSTMP) == TF_RCVD_TSTMP))
-		mss -= TCPOLEN_TSTAMP_APPA;
-
-	tp->t_maxseg = mss;
-#endif
-}
-
 /*
  * TCP input handling is split into multiple parts:
  *   tcp6_input is a thin wrapper around tcp_input for the extended
@@ -364,6 +272,10 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb
 	int drop_hdrlen;
 	int rstreason = 0;
 	uint32_t ticks = get_ticks();
+	struct tcpopt to;		/* options in this segment */
+	u_char* optp = NULL;
+	int optlen = 0;
+	to.to_flags = 0;
 	KASSERT(tp || tpl, ("One of tp and tpl must be positive"));
 #if 0
 	struct mbuf *m = *mp;
@@ -373,7 +285,7 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb
 	struct tcpcb *tp = NULL;
 	struct socket *so = NULL;
 	u_char *optp = NULL;
-	int off0;
+	int off0;	/* It seems that this is the offset of the TCP header from the IP header. */
 	int optlen = 0;
 #ifdef INET
 	int len;
@@ -545,10 +457,9 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb
 	}
 	tlen -= off;	/* tlen is used instead of ti->ti_len */
 	// It seems that now tlen is the length of the data
-	/* FOR NOW, OMIT HANDLING OF EXTRA OPTIONS.
-	   I WILL PUT THIS BACK FOR TCP TIMESTAMPS. */
-#if 0
+	
 	if (off > sizeof (struct tcphdr)) {
+#if 0 /* OMIT HANDLING OF EXTRA OPTIONS. */
 #ifdef INET6
 		if (isipv6) {
 			IP6_EXTHDR_CHECK(m, off0, off, IPPROTO_DONE);
@@ -572,10 +483,11 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb
 			}
 		}
 #endif
+#endif
 		optlen = off - sizeof (struct tcphdr);
 		optp = (u_char *)(th + 1);
 	}
-#endif
+
 	thflags = th->th_flags;
 
 	/*
@@ -1208,10 +1120,11 @@ relocked:
 			    (void *)tcp_saveipgen, &tcp_savetcp, 0);
 #endif
 		TCP_PROBE3(debug__input, tp, th, mtod(m, const char *));
-		tcp_dooptions(&to, optp, optlen, TO_SYN);
 #endif
+		tcp_dooptions(&to, optp, optlen, TO_SYN);
+
 		//syncache_add(&inc, &to, th, inp, &so, m, NULL, NULL);
-		// INSTEAD OF ADDING TO TO THE SYNCACHE, INITIALIZE THE NEW SOCKET RIGHT AWAY
+		// INSTEAD OF ADDING TO THE SYNCACHE, INITIALIZE THE NEW SOCKET RIGHT AWAY
 		// CODE IS TAKEN FROM THE syncache_socket FUNCTION
 		tp = tpl->acceptinto;
 		tcp_state_change(tp, TCPS_SYN_RECEIVED);
@@ -1231,22 +1144,54 @@ relocked:
 		memcpy(&tp->faddr, &ip6->ip6_src, sizeof(tp->faddr));
 		tp->fport = th->th_sport;
 		tp->lport = tpl->lport;
-
+		
+		tp->t_flags = (TF_NOPUSH | TF_NODELAY | (tp->t_flags & TF_NOOPT));
 //		tp->t_flags = sototcpcb(lso)->t_flags & (TF_NOPUSH|TF_NODELAY);
 //		if (sc->sc_flags & SCF_NOOPT)
-			tp->t_flags |= TF_NOOPT;
-#if 0 // Don't handle TCP options right now
-		else {
-			if (sc->sc_flags & SCF_WINSCALE) {
+//			tp->t_flags |= TF_NOOPT;
+//		else {
+		if (!(tp->t_flags & TF_NOOPT) && V_tcp_do_rfc1323) {
+			if (/*sc->sc_flags & SCF_WINSCALE*/to.to_flags & TOF_SCALE) {
+				int wscale = 0;
+
+				/*
+				 * Pick the smallest possible scaling factor that
+				 * will still allow us to scale up to sb_max, aka
+				 * kern.ipc.maxsockbuf.
+				 *
+				 * We do this because there are broken firewalls that
+				 * will corrupt the window scale option, leading to
+				 * the other endpoint believing that our advertised
+				 * window is unscaled.  At scale factors larger than
+				 * 5 the unscaled window will drop below 1500 bytes,
+				 * leading to serious problems when traversing these
+				 * broken firewalls.
+				 *
+				 * With the default maxsockbuf of 256K, a scale factor
+				 * of 3 will be chosen by this algorithm.  Those who
+				 * choose a larger maxsockbuf should watch out
+				 * for the compatiblity problems mentioned above.
+				 *
+				 * RFC1323: The Window field in a SYN (i.e., a <SYN>
+				 * or <SYN,ACK>) segment itself is never scaled.
+				 */
+				 /*
+				while (wscale < TCP_MAX_WINSHIFT &&
+					(TCP_MAXWIN << wscale) < sb_max)
+					wscale++;
+				*/
+				/* I have ~30K of memory. There's no reason I would need
+				   window scaling. */
+				
 				tp->t_flags |= TF_REQ_SCALE|TF_RCVD_SCALE;
-				tp->snd_scale = sc->sc_requested_s_scale;
-				tp->request_r_scale = sc->sc_requested_r_scale;
+				tp->snd_scale = /*sc->sc_requested_s_scale*/to.to_wscale;
+				tp->request_r_scale = wscale;
 			}
-			if (sc->sc_flags & SCF_TIMESTAMP) {
+			if (/*sc->sc_flags & SCF_TIMESTAMP*/to.to_flags & TOF_TS) {
 				tp->t_flags |= TF_REQ_TSTMP|TF_RCVD_TSTMP;
-				tp->ts_recent = sc->sc_tsreflect;
+				tp->ts_recent = /*sc->sc_tsreflect*/to.to_tsval;
 				tp->ts_recent_age = tcp_ts_getticks();
-				tp->ts_offset = sc->sc_tsoff;
+				tp->ts_offset = /*sc->sc_tsoff*/0; // No syncookies, so this should always be 0 
 			}
 #if 0
 	#ifdef TCP_SIGNATURE
@@ -1254,12 +1199,20 @@ relocked:
 				tp->t_flags |= TF_SIGNATURE;
 	#endif
 #endif
-			if (sc->sc_flags & SCF_SACK)
+#if 0 // Don't permit SACK
+			if (/*sc->sc_flags & SCF_SACK*/ to.to_flags & TOF_SACKPERM)
 				tp->t_flags |= TF_SACK_PERMIT;
-		}
-		if (sc->sc_flags & SCF_ECN)
-			tp->t_flags |= TF_ECN_PERMIT;
 #endif
+		}
+		if (/*sc->sc_flags & SCF_ECN*/(th->th_flags & (TH_ECE|TH_CWR)) && V_tcp_do_ecn)
+			tp->t_flags |= TF_ECN_PERMIT;
+		
+		/*
+		 * Set up MSS and get cached values from tcp_hostcache.
+		 * This might overwrite some of the defaults we just set.
+		 */
+		tcp_mss(tp, /*sc->sc_peer_mss*/to.to_mss);
+		
 		/*
 		 * Entry added to syncache and mbuf consumed.
 		 * Only the listen socket is unlocked by syncache_add().
@@ -1493,18 +1446,17 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	/*
 	 * Parse options on any incoming segment.
 	 */
-#if 0 // Skip options for now
 	tcp_dooptions(&to, (u_char *)(th + 1),
 	    (th->th_off << 2) - sizeof(struct tcphdr),
 	    (thflags & TH_SYN) ? TO_SYN : 0);
-#endif
+	    
 	/*
 	 * If echoed timestamp is later than the current time,
 	 * fall back to non RFC1323 RTT calculation.  Normalize
 	 * timestamp if syncookies were used when this connection
 	 * was established.
 	 */
-#if 0 // Skip timestamps for now
+
 	if ((to.to_flags & TOF_TS) && (to.to_tsecr != 0)) {
 		to.to_tsecr -= tp->ts_offset;
 		if (TSTMP_GT(to.to_tsecr, tcp_ts_getticks()))
@@ -1515,20 +1467,20 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	 * appear on every segment during this session and vice versa.
 	 */
 	if ((tp->t_flags & TF_RCVD_TSTMP) && !(to.to_flags & TOF_TS)) {
-		if ((s = tcp_log_addrs(inc, th, NULL, NULL))) {
-			log(LOG_DEBUG, "%s; %s: Timestamp missing, "
-			    "no action\n", s, __func__);
-			free(s, M_TCPLOG);
-		}
+//		if ((s = tcp_log_addrs(inc, th, NULL, NULL))) {
+			printf(/*log(LOG_DEBUG, */"%s; %s: Timestamp missing, "
+			    "no action\n", /*s*/"note", __func__);
+//			free(s, M_TCPLOG);
+//		}
 	}
 	if (!(tp->t_flags & TF_RCVD_TSTMP) && (to.to_flags & TOF_TS)) {
-		if ((s = tcp_log_addrs(inc, th, NULL, NULL))) {
-			log(LOG_DEBUG, "%s; %s: Timestamp not expected, "
-			    "no action\n", s, __func__);
-			free(s, M_TCPLOG);
-		}
+//		if ((s = tcp_log_addrs(inc, th, NULL, NULL))) {
+			printf(/*log(LOG_DEBUG, */"%s; %s: Timestamp not expected, "
+			    "no action\n", /*s*/"note", __func__);
+//			free(s, M_TCPLOG);
+//		}
 	}
-#endif
+
 	/*
 	 * Process options only when we get SYN/ACK back. The SYN case
 	 * for incoming connections is handled in tcp_syncache.
@@ -1537,19 +1489,16 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	 * XXX this is traditional behavior, may need to be cleaned up.
 	 */
 	if (tp->t_state == TCPS_SYN_SENT && (thflags & TH_SYN)) {
-#if 0 // DON'T PROCESS OPTIONS YET
 		if ((to.to_flags & TOF_SCALE) &&
 		    (tp->t_flags & TF_REQ_SCALE)) {
 			tp->t_flags |= TF_RCVD_SCALE;
 			tp->snd_scale = to.to_wscale;
 		}
-#endif
 		/*
 		 * Initial send window.  It will be updated with
 		 * the next incoming segment to the scaled value.
 		 */
 		tp->snd_wnd = th->th_win;
-#if 0 // DON'T PROCESS OPTIONS YET
 		if (to.to_flags & TOF_TS) {
 			tp->t_flags |= TF_RCVD_TSTMP;
 			tp->ts_recent = to.to_tsval;
@@ -1560,7 +1509,6 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		if ((tp->t_flags & TF_SACK_PERMIT) &&
 		    (to.to_flags & TOF_SACKPERM) == 0)
 			tp->t_flags &= ~TF_SACK_PERMIT;
-#endif
 	}
 	/*
 	 * Header prediction: check for the two common cases
@@ -1584,10 +1532,10 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	    (thflags & (TH_SYN|TH_FIN|TH_RST|TH_URG|TH_ACK)) == TH_ACK &&
 	    tp->snd_nxt == tp->snd_max &&
 	    tiwin && tiwin == tp->snd_wnd && 
-	    ((tp->t_flags & (TF_NEEDSYN|TF_NEEDFIN)) == 0) /*&&
-	    LIST_EMPTY(&tp->t_segq) &&
+	    ((tp->t_flags & (TF_NEEDSYN|TF_NEEDFIN)) == 0) &&
+	    /*LIST_EMPTY(&tp->t_segq) &&*/
 	    ((to.to_flags & TOF_TS) == 0 ||
-	     TSTMP_GEQ(to.to_tsval, tp->ts_recent))*/ ) {
+	     TSTMP_GEQ(to.to_tsval, tp->ts_recent)) ) {
 
 		/*
 		 * If last ACK falls within this segment's sequence numbers,
@@ -1595,11 +1543,11 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		 * NOTE that the test is modified according to the latest
 		 * proposal of the tcplw@cray.com list (Braden 1993/04/26).
 		 */
-		/*if ((to.to_flags & TOF_TS) != 0 &&
+		if ((to.to_flags & TOF_TS) != 0 &&
 		    SEQ_LEQ(th->th_seq, tp->last_ack_sent)) {
 			tp->ts_recent_age = tcp_ts_getticks();
 			tp->ts_recent = to.to_tsval;
-		}*/
+		}
 
 		if (tlen == 0) {
 			if (SEQ_GT(th->th_ack, tp->snd_una) &&
@@ -1634,7 +1582,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				 * timestamps of 0 or we could calculate a
 				 * huge RTT and blow up the retransmit timer.
 				 */
-/* // Don't use TCP timestamps
+
 				if ((to.to_flags & TOF_TS) != 0 &&
 				    to.to_tsecr) {
 					u_int t;
@@ -1644,7 +1592,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 						tp->t_rttlow = t;
 					tcp_xmit_timer(tp,
 					    TCP_TS_TO_TICKS(t) + 1);
-				} else*/ if (tp->t_rtttime &&
+				} else if (tp->t_rtttime &&
 				    SEQ_GT(th->th_ack, tp->t_rtseq)) {
 					if (!tp->t_rttlow ||
 					    tp->t_rttlow > ticks - tp->t_rtttime)
@@ -1791,7 +1739,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		 * TODO: Only step up if the application is actually serving
 		 * the buffer to better manage the socket buffer resources.
 		 */
-#if 0
+#if 0 // Don't bother with this; the receive buffer is statically allocated and can't be resized
 			if (V_tcp_do_autorcvbuf &&
 			    (to.to_flags & TOF_TS) &&
 			    to.to_tsecr &&
@@ -1883,7 +1831,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				rstreason = BANDLIM_RST_OPENPORT;
 				goto dropwithreset;
 		} else if ((thflags & TH_SYN) && !(thflags & TH_ACK) && (th->th_seq == tp->irs)) { // this clause was added by Sam
-		    //tp->snd_nxt = tp->snd_una;
+		    //tp->snd_nxt = tp->snd_una; // Added by Sam, then commented out
 		    tp->t_flags |= TF_ACKNOW;//tcp_output(tp);
 		}
 		break;
@@ -2139,7 +2087,6 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	 * RFC 1323 PAWS: If we have a timestamp reply on this segment
 	 * and it's less than ts_recent, drop it.
 	 */
-#if 0
 	if ((to.to_flags & TOF_TS) != 0 && tp->ts_recent &&
 	    TSTMP_LT(to.to_tsval, tp->ts_recent)) {
 
@@ -2158,15 +2105,15 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			 */
 			tp->ts_recent = 0;
 		} else {
-			TCPSTAT_INC(tcps_rcvduppack);
-			TCPSTAT_ADD(tcps_rcvdupbyte, tlen);
-			TCPSTAT_INC(tcps_pawsdrop);
+//			TCPSTAT_INC(tcps_rcvduppack);
+//			TCPSTAT_ADD(tcps_rcvdupbyte, tlen);
+//			TCPSTAT_INC(tcps_pawsdrop);
 			if (tlen)
 				goto dropafterack;
 			goto drop;
 		}
 	}
-#endif
+
 	/*
 	 * In the SYN-RECEIVED state, validate that the packet belongs to
 	 * this connection before trimming the data to fit the receive
@@ -2297,7 +2244,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	 *    Vol. 2 p.869. In such cases, we can still calculate the
 	 *    RTT correctly when RCV.NXT == Last.ACK.Sent.
 	 */
-#if 0
+
 	if ((to.to_flags & TOF_TS) != 0 &&
 	    SEQ_LEQ(th->th_seq, tp->last_ack_sent) &&
 	    SEQ_LEQ(tp->last_ack_sent, th->th_seq + tlen +
@@ -2305,7 +2252,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		tp->ts_recent_age = tcp_ts_getticks();
 		tp->ts_recent = to.to_tsval;
 	}
-#endif
+
 	/*
 	 * If the ACK bit is off:  if in SYN-RECEIVED state or SENDSYN
 	 * flag is on (half-synchronized state), then queue data for
@@ -2658,7 +2605,7 @@ process_ACK:
 		 * timestamps of 0 or we could calculate a
 		 * huge RTT and blow up the retransmit timer.
 		 */
-/*
+
 		if ((to.to_flags & TOF_TS) != 0 && to.to_tsecr) {
 			u_int t;
 
@@ -2666,7 +2613,7 @@ process_ACK:
 			if (!tp->t_rttlow || tp->t_rttlow > t)
 				tp->t_rttlow = t;
 			tcp_xmit_timer(tp, TCP_TS_TO_TICKS(t) + 1);
-		} else*/ if (tp->t_rtttime && SEQ_GT(th->th_ack, tp->t_rtseq)) {
+		} else if (tp->t_rtttime && SEQ_GT(th->th_ack, tp->t_rtseq)) {
 			if (!tp->t_rttlow || tp->t_rttlow > ticks - tp->t_rtttime)
 				tp->t_rttlow = ticks - tp->t_rtttime;
 			tcp_xmit_timer(tp, ticks - tp->t_rtttime);
@@ -3154,6 +3101,100 @@ drop:
 }
 
 /*
+ * Parse TCP options and place in tcpopt.
+ */
+static void
+tcp_dooptions(struct tcpopt *to, u_char *cp, int cnt, int flags)
+{
+	int opt, optlen;
+
+	to->to_flags = 0;
+	for (; cnt > 0; cnt -= optlen, cp += optlen) {
+		opt = cp[0];
+		if (opt == TCPOPT_EOL)
+			break;
+		if (opt == TCPOPT_NOP)
+			optlen = 1;
+		else {
+			if (cnt < 2)
+				break;
+			optlen = cp[1];
+			if (optlen < 2 || optlen > cnt)
+				break;
+		}
+		switch (opt) {
+		case TCPOPT_MAXSEG:
+			if (optlen != TCPOLEN_MAXSEG)
+				continue;
+			if (!(flags & TO_SYN))
+				continue;
+			to->to_flags |= TOF_MSS;
+			bcopy((char *)cp + 2,
+			    (char *)&to->to_mss, sizeof(to->to_mss));
+			to->to_mss = ntohs(to->to_mss);
+			break;
+		case TCPOPT_WINDOW:
+			if (optlen != TCPOLEN_WINDOW)
+				continue;
+			if (!(flags & TO_SYN))
+				continue;
+			to->to_flags |= TOF_SCALE;
+			to->to_wscale = min(cp[2], TCP_MAX_WINSHIFT);
+			break;
+		case TCPOPT_TIMESTAMP:
+			if (optlen != TCPOLEN_TIMESTAMP)
+				continue;
+			to->to_flags |= TOF_TS;
+			bcopy((char *)cp + 2,
+			    (char *)&to->to_tsval, sizeof(to->to_tsval));
+			to->to_tsval = ntohl(to->to_tsval);
+			bcopy((char *)cp + 6,
+			    (char *)&to->to_tsecr, sizeof(to->to_tsecr));
+			to->to_tsecr = ntohl(to->to_tsecr);
+			break;
+#ifdef TCP_SIGNATURE
+		/*
+		 * XXX In order to reply to a host which has set the
+		 * TCP_SIGNATURE option in its initial SYN, we have to
+		 * record the fact that the option was observed here
+		 * for the syncache code to perform the correct response.
+		 */
+		case TCPOPT_SIGNATURE:
+			if (optlen != TCPOLEN_SIGNATURE)
+				continue;
+			to->to_flags |= TOF_SIGNATURE;
+			to->to_signature = cp + 2;
+			break;
+#endif
+		case TCPOPT_SACK_PERMITTED:
+			if (optlen != TCPOLEN_SACK_PERMITTED)
+				continue;
+			if (!(flags & TO_SYN))
+				continue;
+			if (!V_tcp_do_sack)
+				continue;
+			printf("WARNING: Processing SACK permitted message\n");
+			to->to_flags |= TOF_SACKPERM;
+			break;
+		case TCPOPT_SACK:
+			if (optlen <= 2 || (optlen - 2) % TCPOLEN_SACK != 0)
+				continue;
+			if (flags & TO_SYN)
+				continue;
+			printf("WARNING: Processing SACK\n");
+//			to->to_flags |= TOF_SACK;
+//			to->to_nsacks = (optlen - 2) / TCPOLEN_SACK;
+//			to->to_sacks = cp + 2;
+//			TCPSTAT_INC(tcps_sack_rcv_blocks);
+			break;
+		default:
+			continue;
+		}
+	}
+}
+
+
+/*
  * Collect new round-trip time estimate
  * and update averages and current timeout.
  */
@@ -3232,5 +3273,342 @@ tcp_xmit_timer(struct tcpcb *tp, int rtt)
 	 * and the return path might not be symmetrical).
 	 */
 	tp->t_softerror = 0;
+}
+
+/* Taken from netinet6/in6.c. */
+int
+in6_localaddr(struct in6_addr *in6)
+{
+	//struct rm_priotracker in6_ifa_tracker;
+	//struct in6_ifaddr *ia;
+
+	if (IN6_IS_ADDR_LOOPBACK(in6) || IN6_IS_ADDR_LINKLOCAL(in6))
+		return 1;
+#if 0
+	IN6_IFADDR_RLOCK(&in6_ifa_tracker);
+	TAILQ_FOREACH(ia, &V_in6_ifaddrhead, ia_link) {
+		if (IN6_ARE_MASKED_ADDR_EQUAL(in6, &ia->ia_addr.sin6_addr,
+		    &ia->ia_prefixmask.sin6_addr)) {
+			IN6_IFADDR_RUNLOCK(&in6_ifa_tracker);
+			return 1;
+		}
+	}
+	IN6_IFADDR_RUNLOCK(&in6_ifa_tracker);
+#endif
+	return (0);
+}
+
+/*
+ * Determine a reasonable value for maxseg size.
+ * If the route is known, check route for mtu.
+ * If none, use an mss that can be handled on the outgoing interface
+ * without forcing IP to fragment.  If no route is found, route has no mtu,
+ * or the destination isn't local, use a default, hopefully conservative
+ * size (usually 512 or the default IP max size, but no more than the mtu
+ * of the interface), as we can't discover anything about intervening
+ * gateways or networks.  We also initialize the congestion/slow start
+ * window to be a single segment if the destination isn't local.
+ * While looking at the routing entry, we also initialize other path-dependent
+ * parameters from pre-set or cached values in the routing entry.
+ *
+ * Also take into account the space needed for options that we
+ * send regularly.  Make maxseg shorter by that amount to assure
+ * that we can send maxseg amount of data even when the options
+ * are present.  Store the upper limit of the length of options plus
+ * data in maxopd.
+ *
+ * NOTE that this routine is only called when we process an incoming
+ * segment, or an ICMP need fragmentation datagram. Outgoing SYN/ACK MSS
+ * settings are handled in tcp_mssopt().
+ */
+void
+tcp_mss_update(struct tcpcb *tp, int offer, int mtuoffer,
+    struct hc_metrics_lite *metricptr, struct tcp_ifcap *cap)
+{
+	int mss = 0;
+	u_long maxmtu = 0;
+//	struct inpcb *inp = tp->t_inpcb;
+	struct hc_metrics_lite metrics;
+	int origoffer;
+//#ifdef INET6
+//	int isipv6 = ((inp->inp_vflag & INP_IPV6) != 0) ? 1 : 0;
+	size_t min_protoh = /*isipv6 ?*/
+			    sizeof (struct ip6_hdr) + sizeof (struct tcphdr)/* :
+			    sizeof (struct tcpiphdr)*/;
+//#else
+//	const size_t min_protoh = sizeof(struct tcpiphdr);
+//#endif
+
+//	INP_WLOCK_ASSERT(tp->t_inpcb);
+
+	if (mtuoffer != -1) {
+		KASSERT(offer == -1, ("%s: conflict", __func__));
+		offer = mtuoffer - min_protoh;
+	}
+	origoffer = offer;
+
+	/* Initialize. */
+//#ifdef INET6
+//	if (isipv6) {
+		maxmtu = tcp_maxmtu6(/*&inp->inp_inc*/tp, cap);
+		tp->t_maxopd = tp->t_maxseg = V_tcp_v6mssdflt;
+//	}
+//#endif
+#if 0 // We're IPv6
+#if defined(INET) && defined(INET6)
+	else
+#endif
+#ifdef INET
+	{
+		maxmtu = tcp_maxmtu(&inp->inp_inc, cap);
+		tp->t_maxopd = tp->t_maxseg = V_tcp_mssdflt;
+	}
+#endif
+#endif
+	/*
+	 * No route to sender, stay with default mss and return.
+	 */
+	if (maxmtu == 0) {
+		/*
+		 * In case we return early we need to initialize metrics
+		 * to a defined state as tcp_hc_get() would do for us
+		 * if there was no cache hit.
+		 */
+		if (metricptr != NULL)
+			bzero(metricptr, sizeof(struct hc_metrics_lite));
+		return;
+	}
+
+	/* What have we got? */
+	switch (offer) {
+		case 0:
+			/*
+			 * Offer == 0 means that there was no MSS on the SYN
+			 * segment, in this case we use tcp_mssdflt as
+			 * already assigned to t_maxopd above.
+			 */
+			offer = tp->t_maxopd;
+			break;
+
+		case -1:
+			/*
+			 * Offer == -1 means that we didn't receive SYN yet.
+			 */
+			/* FALLTHROUGH */
+
+		default:
+			/*
+			 * Prevent DoS attack with too small MSS. Round up
+			 * to at least minmss.
+			 */
+			offer = max(offer, V_tcp_minmss);
+	}
+
+	/*
+	 * rmx information is now retrieved from tcp_hostcache.
+	 */
+	tcp_hc_get(/*&inp->inp_inc*/tp, &metrics);
+	if (metricptr != NULL)
+		bcopy(&metrics, metricptr, sizeof(struct hc_metrics_lite));
+
+	/*
+	 * If there's a discovered mtu in tcp hostcache, use it.
+	 * Else, use the link mtu.
+	 */
+	if (metrics.rmx_mtu)
+		mss = min(metrics.rmx_mtu, maxmtu) - min_protoh;
+	else {
+//#ifdef INET6
+//		if (isipv6) {
+			mss = maxmtu - min_protoh;
+			if (!V_path_mtu_discovery &&
+			    !in6_localaddr(/*&inp->in6p_faddr*/ &tp->faddr))
+				mss = min(mss, V_tcp_v6mssdflt);
+//		}
+//#endif
+#if 0
+#if defined(INET) && defined(INET6)
+		else
+#endif
+#ifdef INET
+		{
+			mss = maxmtu - min_protoh;
+			if (!V_path_mtu_discovery &&
+			    !in_localaddr(inp->inp_faddr))
+				mss = min(mss, V_tcp_mssdflt);
+		}
+#endif
+#endif
+		/*
+		 * XXX - The above conditional (mss = maxmtu - min_protoh)
+		 * probably violates the TCP spec.
+		 * The problem is that, since we don't know the
+		 * other end's MSS, we are supposed to use a conservative
+		 * default.  But, if we do that, then MTU discovery will
+		 * never actually take place, because the conservative
+		 * default is much less than the MTUs typically seen
+		 * on the Internet today.  For the moment, we'll sweep
+		 * this under the carpet.
+		 *
+		 * The conservative default might not actually be a problem
+		 * if the only case this occurs is when sending an initial
+		 * SYN with options and data to a host we've never talked
+		 * to before.  Then, they will reply with an MSS value which
+		 * will get recorded and the new parameters should get
+		 * recomputed.  For Further Study.
+		 */
+	}
+	mss = min(mss, offer);
+
+	/*
+	 * Sanity check: make sure that maxopd will be large
+	 * enough to allow some data on segments even if the
+	 * all the option space is used (40bytes).  Otherwise
+	 * funny things may happen in tcp_output.
+	 */
+	mss = max(mss, 64);
+
+	/*
+	 * maxopd stores the maximum length of data AND options
+	 * in a segment; maxseg is the amount of data in a normal
+	 * segment.  We need to store this value (maxopd) apart
+	 * from maxseg, because now every segment carries options
+	 * and thus we normally have somewhat less data in segments.
+	 */
+	tp->t_maxopd = mss;
+
+	/*
+	 * origoffer==-1 indicates that no segments were received yet.
+	 * In this case we just guess.
+	 */
+	if ((tp->t_flags & (TF_REQ_TSTMP|TF_NOOPT)) == TF_REQ_TSTMP &&
+	    (origoffer == -1 ||
+	     (tp->t_flags & TF_RCVD_TSTMP) == TF_RCVD_TSTMP))
+		mss -= TCPOLEN_TSTAMP_APPA;
+
+	tp->t_maxseg = mss;
+}
+
+void
+tcp_mss(struct tcpcb *tp, int offer)
+{
+	int mss;
+	u_long bufsize;
+//	struct inpcb *inp;
+//	struct socket *so;
+	struct hc_metrics_lite metrics;
+	struct tcp_ifcap cap;
+	size_t sendbufsize = cbuf_size(tp->sendbuf);
+
+	KASSERT(tp != NULL, ("%s: tp == NULL", __func__));
+
+	bzero(&cap, sizeof(cap));
+	tcp_mss_update(tp, offer, -1, &metrics, &cap);
+
+	mss = tp->t_maxseg;
+//	inp = tp->t_inpcb;
+
+	/*
+	 * If there's a pipesize, change the socket buffer to that size,
+	 * don't change if sb_hiwat is different than default (then it
+	 * has been changed on purpose with setsockopt).
+	 * Make the socket buffers an integral number of mss units;
+	 * if the mss is larger than the socket buffer, decrease the mss.
+	 */
+	 // Sam: the socket buffers is statically allocated, so I can't change its size
+//	so = inp->inp_socket;
+//	SOCKBUF_LOCK(&so->so_snd);
+
+
+//	if ((/*so->so_snd.sb_hiwat*/sendbufsize == V_tcp_sendspace) && metrics.rmx_sendpipe)
+//		bufsize = metrics.rmx_sendpipe;
+//	else
+		bufsize = /*so->so_snd.sb_hiwat*/ sendbufsize;
+	if (bufsize < mss)
+		mss = bufsize;
+#if 0 // The send buffer is statically allocated, so I can't change its size...
+	else {
+		bufsize = roundup(bufsize, mss);
+		if (bufsize > sb_max)
+			bufsize = sb_max;
+		if (bufsize > so->so_snd.sb_hiwat)
+			(void)sbreserve_locked(&so->so_snd, bufsize, so, NULL);
+	}
+#endif
+//	SOCKBUF_UNLOCK(&so->so_snd);
+	tp->t_maxseg = mss;
+
+//	SOCKBUF_LOCK(&so->so_rcv);
+#if 0 // The receive buffer is statically allocated, so I can't change its size...
+	if ((so->so_rcv.sb_hiwat == V_tcp_recvspace) && metrics.rmx_recvpipe)
+		bufsize = metrics.rmx_recvpipe;
+	else
+		bufsize = so->so_rcv.sb_hiwat;
+	if (bufsize > mss) {
+		bufsize = roundup(bufsize, mss);
+		if (bufsize > sb_max)
+			bufsize = sb_max;
+		if (bufsize > so->so_rcv.sb_hiwat)
+			(void)sbreserve_locked(&so->so_rcv, bufsize, so, NULL);
+	}
+#endif
+//	SOCKBUF_UNLOCK(&so->so_rcv);
+
+#if 0 // No support for TCP Segment Offloading
+	/* Check the interface for TSO capabilities. */
+	if (cap.ifcap & CSUM_TSO) {
+		tp->t_flags |= TF_TSO;
+		tp->t_tsomax = cap.tsomax;
+		tp->t_tsomaxsegcount = cap.tsomaxsegcount;
+		tp->t_tsomaxsegsize = cap.tsomaxsegsize;
+	}
+#endif
+}
+
+
+// TODO Translate MSS Option
+/*
+ * Determine the MSS option to send on an outgoing SYN.
+ */
+int
+tcp_mssopt(/*struct in_conninfo *inc*/struct tcpcb* tp)
+{
+	int mss = 0;
+	u_long maxmtu = 0;
+	u_long thcmtu = 0;
+	size_t min_protoh;
+
+//	KASSERT(inc != NULL, ("tcp_mssopt with NULL in_conninfo pointer"));
+	KASSERT(tp != NULL, ("tcp_mssopt with NULL tcpcb pointer"));
+
+//#ifdef INET6
+//	if (inc->inc_flags & INC_ISIPV6) {
+		mss = V_tcp_v6mssdflt;
+		maxmtu = tcp_maxmtu6(/*inc*/tp, NULL);
+		min_protoh = sizeof(struct ip6_hdr) + sizeof(struct tcphdr);
+//	}
+//#endif
+#if 0
+#if defined(INET) && defined(INET6)
+	else
+#endif
+#ifdef INET
+	{
+		mss = V_tcp_mssdflt;
+		maxmtu = tcp_maxmtu(inc, NULL);
+		min_protoh = sizeof(struct tcpiphdr);
+	}
+#endif
+#endif
+//#if defined(INET6) || defined(INET)
+	thcmtu = tcp_hc_getmtu(/*inc*/tp); /* IPv4 and IPv6 */
+//#endif
+
+	if (maxmtu && thcmtu)
+		mss = min(maxmtu, thcmtu) - min_protoh;
+	else if (maxmtu || thcmtu)
+		mss = max(maxmtu, thcmtu) - min_protoh;
+
+	return (mss);
 }
 

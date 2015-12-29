@@ -127,6 +127,8 @@ tcp_output(struct tcpcb *tp)
 	char* buf, * bufreal;
 	struct ip6_packet* msg;
   	struct ip_iovec* iov;
+  	struct tcpopt to;
+  	u_char opt[TCP_MAXOLEN];
   	uint32_t ticks = get_ticks();
 #if 0
 #ifdef TCP_OFFLOAD
@@ -684,14 +686,15 @@ send:
 	 * We only have to care about SYN and established connection
 	 * segments.  Options for SYN-ACK segments are handled in TCP
 	 * syncache.
+	 * Sam: I've done away with the syncache. However, it seems that
+	 * the existing logic works fine for SYN-ACK as well
 	 */
-#if 0 // DON'T HANDLE TCP OPTIONS. I MAY CONSIDER IT LATER, HOWEVER.
 	if ((tp->t_flags & TF_NOOPT) == 0) {
 		to.to_flags = 0;
 		/* Maximum segment size. */
 		if (flags & TH_SYN) {
 			tp->snd_nxt = tp->iss;
-			to.to_mss = tcp_mssopt(&tp->t_inpcb->inp_inc);
+			to.to_mss = tcp_mssopt(/*&tp->t_inpcb->inp_inc*/tp);
 			to.to_flags |= TOF_MSS;
 		}
 		/* Window scaling. */
@@ -705,11 +708,14 @@ send:
 			to.to_tsval = tcp_ts_getticks() + tp->ts_offset;
 			to.to_tsecr = tp->ts_recent;
 			to.to_flags |= TOF_TS;
+#if 0
 			/* Set receive buffer autosizing timestamp. */
 			if (tp->rfbuf_ts == 0 &&
 			    (so->so_rcv.sb_flags & SB_AUTOSIZE))
 				tp->rfbuf_ts = tcp_ts_getticks();
+#endif
 		}
+#if 0 // Don't allow Selective ACKs
 		/* Selective ACK's. */
 		if (tp->t_flags & TF_SACK_PERMIT) {
 			if (flags & TH_SYN)
@@ -722,16 +728,18 @@ send:
 				to.to_sacks = (u_char *)tp->sackblks;
 			}
 		}
+#endif
+#if 0
 #ifdef TCP_SIGNATURE
 		/* TCP-MD5 (RFC2385). */
 		if (tp->t_flags & TF_SIGNATURE)
 			to.to_flags |= TOF_SIGNATURE;
 #endif /* TCP_SIGNATURE */
+#endif
 
 		/* Processing the options. */
 		hdrlen += optlen = tcp_addoptions(&to, opt);
 	}
-#endif
 //#ifdef INET6
 //	if (isipv6)
 //		ipoptlen = ip6_optlen(tp->t_inpcb);
@@ -1008,11 +1016,7 @@ send:
 	}
 #endif
 	/* Instead of the previous code that "grabs an mbuf", we need to do this the
-	   TinyOS way, where we ip_malloc a buffer. */
-	if (optlen != 0) {
-		printf("optlen is not zero!\n");
-	}
-	
+	   TinyOS way, where we ip_malloc a buffer. */	
 	// Need to ip_malloc an extra three bytes so that we can word-align the packet
 	alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + optlen + ipoptlen + len + sizeof(struct ip_iovec);
 	bufreal = ip_malloc(alen + 3);
@@ -1142,8 +1146,7 @@ send:
 #endif
 	th->th_ack = htonl(tp->rcv_nxt);
 	if (optlen) {
-		printf("PANIC: optlen is nonzero\n");
-		//bcopy(opt, th + 1, optlen);
+		bcopy(opt, th + 1, optlen);
 		th->th_off = (sizeof (struct tcphdr) + optlen) >> 2;
 	}
 	th->th_flags = flags;
@@ -1348,7 +1351,7 @@ send:
 		RO_RTFREE(&ro);
 #endif
 		// Send packet the TinyOS way
-		send_message(tp, msg, th, len + sizeof(struct tcp_hdr));
+		send_message(tp, msg, th, len + optlen + sizeof(struct tcp_hdr));
 		ip_free(bufreal);
 //	}
 //#endif /* INET6 */
@@ -1597,4 +1600,163 @@ timer:
 	if (sendalot)
 		goto again;
 	return (0);
+}
+
+/*
+ * Insert TCP options according to the supplied parameters to the place
+ * optp in a consistent way.  Can handle unaligned destinations.
+ *
+ * The order of the option processing is crucial for optimal packing and
+ * alignment for the scarce option space.
+ *
+ * The optimal order for a SYN/SYN-ACK segment is:
+ *   MSS (4) + NOP (1) + Window scale (3) + SACK permitted (2) +
+ *   Timestamp (10) + Signature (18) = 38 bytes out of a maximum of 40.
+ *
+ * The SACK options should be last.  SACK blocks consume 8*n+2 bytes.
+ * So a full size SACK blocks option is 34 bytes (with 4 SACK blocks).
+ * At minimum we need 10 bytes (to generate 1 SACK block).  If both
+ * TCP Timestamps (12 bytes) and TCP Signatures (18 bytes) are present,
+ * we only have 10 bytes for SACK options (40 - (12 + 18)).
+ */
+int
+tcp_addoptions(struct tcpopt *to, u_char *optp)
+{
+	u_int mask, optlen = 0;
+
+	for (mask = 1; mask < TOF_MAXOPT; mask <<= 1) {
+		if ((to->to_flags & mask) != mask)
+			continue;
+		if (optlen == TCP_MAXOLEN)
+			break;
+		switch (to->to_flags & mask) {
+		case TOF_MSS:
+			while (optlen % 4) {
+				optlen += TCPOLEN_NOP;
+				*optp++ = TCPOPT_NOP;
+			}
+			if (TCP_MAXOLEN - optlen < TCPOLEN_MAXSEG)
+				continue;
+			optlen += TCPOLEN_MAXSEG;
+			*optp++ = TCPOPT_MAXSEG;
+			*optp++ = TCPOLEN_MAXSEG;
+			to->to_mss = htons(to->to_mss);
+			bcopy((u_char *)&to->to_mss, optp, sizeof(to->to_mss));
+			optp += sizeof(to->to_mss);
+			break;
+		case TOF_SCALE:
+			while (!optlen || optlen % 2 != 1) {
+				optlen += TCPOLEN_NOP;
+				*optp++ = TCPOPT_NOP;
+			}
+			if (TCP_MAXOLEN - optlen < TCPOLEN_WINDOW)
+				continue;
+			optlen += TCPOLEN_WINDOW;
+			*optp++ = TCPOPT_WINDOW;
+			*optp++ = TCPOLEN_WINDOW;
+			*optp++ = to->to_wscale;
+			break;
+		case TOF_SACKPERM:
+			while (optlen % 2) {
+				optlen += TCPOLEN_NOP;
+				*optp++ = TCPOPT_NOP;
+			}
+			if (TCP_MAXOLEN - optlen < TCPOLEN_SACK_PERMITTED)
+				continue;
+			optlen += TCPOLEN_SACK_PERMITTED;
+			*optp++ = TCPOPT_SACK_PERMITTED;
+			*optp++ = TCPOLEN_SACK_PERMITTED;
+			break;
+		case TOF_TS:
+			while (!optlen || optlen % 4 != 2) {
+				optlen += TCPOLEN_NOP;
+				*optp++ = TCPOPT_NOP;
+			}
+			if (TCP_MAXOLEN - optlen < TCPOLEN_TIMESTAMP)
+				continue;
+			optlen += TCPOLEN_TIMESTAMP;
+			*optp++ = TCPOPT_TIMESTAMP;
+			*optp++ = TCPOLEN_TIMESTAMP;
+			to->to_tsval = htonl(to->to_tsval);
+			to->to_tsecr = htonl(to->to_tsecr);
+			bcopy((u_char *)&to->to_tsval, optp, sizeof(to->to_tsval));
+			optp += sizeof(to->to_tsval);
+			bcopy((u_char *)&to->to_tsecr, optp, sizeof(to->to_tsecr));
+			optp += sizeof(to->to_tsecr);
+			break;
+		case TOF_SIGNATURE:
+			{
+			int siglen = TCPOLEN_SIGNATURE - 2;
+
+			while (!optlen || optlen % 4 != 2) {
+				optlen += TCPOLEN_NOP;
+				*optp++ = TCPOPT_NOP;
+			}
+			if (TCP_MAXOLEN - optlen < TCPOLEN_SIGNATURE)
+				continue;
+			optlen += TCPOLEN_SIGNATURE;
+			*optp++ = TCPOPT_SIGNATURE;
+			*optp++ = TCPOLEN_SIGNATURE;
+			to->to_signature = optp;
+			while (siglen--)
+				 *optp++ = 0;
+			break;
+			}
+		case TOF_SACK:
+			{
+			printf("WARNING: Adding SACK option\n");
+#if 0
+			int sackblks = 0;
+			struct sackblk *sack = (struct sackblk *)to->to_sacks;
+			tcp_seq sack_seq;
+
+			while (!optlen || optlen % 4 != 2) {
+				optlen += TCPOLEN_NOP;
+				*optp++ = TCPOPT_NOP;
+			}
+			if (TCP_MAXOLEN - optlen < TCPOLEN_SACKHDR + TCPOLEN_SACK)
+				continue;
+			optlen += TCPOLEN_SACKHDR;
+			*optp++ = TCPOPT_SACK;
+			sackblks = min(to->to_nsacks,
+					(TCP_MAXOLEN - optlen) / TCPOLEN_SACK);
+			*optp++ = TCPOLEN_SACKHDR + sackblks * TCPOLEN_SACK;
+			while (sackblks--) {
+				sack_seq = htonl(sack->start);
+				bcopy((u_char *)&sack_seq, optp, sizeof(sack_seq));
+				optp += sizeof(sack_seq);
+				sack_seq = htonl(sack->end);
+				bcopy((u_char *)&sack_seq, optp, sizeof(sack_seq));
+				optp += sizeof(sack_seq);
+				optlen += TCPOLEN_SACK;
+				sack++;
+			}
+#endif
+//			TCPSTAT_INC(tcps_sack_send_blocks);
+			break;
+			}
+		default:
+			/*panic(*/printf("PANIC: %s: unknown TCP option type", __func__);
+			break;
+		}
+	}
+
+	/* Terminate and pad TCP options to a 4 byte boundary. */
+	if (optlen % 4) {
+		optlen += TCPOLEN_EOL;
+		*optp++ = TCPOPT_EOL;
+	}
+	/*
+	 * According to RFC 793 (STD0007):
+	 *   "The content of the header beyond the End-of-Option option
+	 *    must be header padding (i.e., zero)."
+	 *   and later: "The padding is composed of zeros."
+	 */
+	while (optlen % 4) {
+		optlen += TCPOLEN_PAD;
+		*optp++ = TCPOPT_PAD;
+	}
+
+	KASSERT(optlen <= TCP_MAXOLEN, ("%s: TCP options too long", __func__));
+	return (optlen);
 }

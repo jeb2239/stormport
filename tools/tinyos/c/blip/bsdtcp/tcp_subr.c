@@ -29,6 +29,7 @@
  *	@(#)tcp_subr.c	8.2 (Berkeley) 5/24/95
  */
  
+#include "ip6.h"
 #include "tcp.h"
 #include "tcp_fsm.h"
 #include "tcp_var.h"
@@ -48,6 +49,11 @@ int tcp_rexmit_slop;
 int tcp_msl;
 //int tcp_ttl;			/* time to live for TCP segs */
 int tcp_finwait2_timeout;
+
+const int V_tcp_do_rfc1323 = 1;
+const int V_tcp_v6mssdflt = FRAGLIMIT_6LOWPAN - sizeof(struct ip6_hdr) - sizeof(struct tcphdr);
+/* Normally, this is used to prevent DoS attacks by sending tiny MSS values in the options. */
+const int V_tcp_minmss = 70; // Barely enough for TCP header and all options. Default is 216.
 
 // A simple linear congruential number generator
 tcp_seq seed = (tcp_seq) 0xbeaddeed; 
@@ -206,12 +212,26 @@ tcp_state_change(struct tcpcb *tp, int newstate)
  /* This is based on tcp_newtcb in tcp_subr.c, and tcp_usr_attach in tcp_usrreq.c. */
 void initialize_tcb(struct tcpcb* tp, uint16_t lport, int index) {
 	int rv1, rv2;
+	uint32_t ticks = get_ticks();
 	
     memset(tp, 0x00, sizeof(struct tcpcb));
     tp->lport = lport;
     tp->index = index;
     // Congestion control algorithm. For now, don't include it.
     // CC_ALGO(tp) = CC_DEFAULT();
+    
+    tp->t_maxseg = tp->t_maxopd =
+//#ifdef INET6
+		/*isipv6 ? */V_tcp_v6mssdflt /*:*/
+//#endif /* INET6 */
+		/*V_tcp_mssdflt*/;
+    
+    if (V_tcp_do_rfc1323)
+		tp->t_flags = (TF_REQ_SCALE|TF_REQ_TSTMP);
+#if 0 // NO SACK
+	if (V_tcp_do_sack)
+		tp->t_flags |= TF_SACK_PERMIT;
+#endif
     
     /*
 	 * Init srtt to TCPTV_SRTTBASE (0), so we can tell that we have no
@@ -224,7 +244,7 @@ void initialize_tcb(struct tcpcb* tp, uint16_t lport, int index) {
 	tp->t_rxtcur = TCPTV_RTOBASE;
 	tp->snd_cwnd = TCP_MAXWIN << TCP_MAX_WINSHIFT;
 	tp->snd_ssthresh = TCP_MAXWIN << TCP_MAX_WINSHIFT;
-	//tp->t_rcvtime = get_time();
+	tp->t_rcvtime = ticks;
 	
 	/* From tcp_usr_attach in tcp_usrreq.c. */
 	tp->t_state = TCP6S_CLOSED;
@@ -235,8 +255,8 @@ void initialize_tcb(struct tcpcb* tp, uint16_t lport, int index) {
 		printf("Buffers too small!\n");
 	}
 	
-	tp->t_maxopd = 1280; // don't change dynamically. These are conservative estimates.
-	tp->t_maxseg = 1200;
+	tp->t_maxopd = 60; // don't change dynamically. These are conservative estimates.
+	tp->t_maxseg = 50;
 }
 
  /*
@@ -657,4 +677,61 @@ tcp_drop(struct tcpcb *tp, int errno)
     tp = tcp_close(tp);
     connection_lost(tp, errno);
     return tp;
+}
+
+/*
+ * Look-up the routing entry to the peer of this inpcb.  If no route
+ * is found and it cannot be allocated, then return 0.  This routine
+ * is called by TCP routines that access the rmx structure and by
+ * tcp_mss_update to get the peer/interface MTU.
+ */
+u_long
+tcp_maxmtu6(/*struct in_conninfo *inc,*/struct tcpcb* tp, struct tcp_ifcap *cap)
+{
+	u_long maxmtu = 0;
+	
+	KASSERT (tp != NULL, ("tcp_maxmtu6 with NULL tcpcb pointer"));
+	if (!IN6_IS_ADDR_UNSPECIFIED(&tp->faddr)) {
+		maxmtu = FRAGLIMIT_6LOWPAN;
+	}
+	
+	return (maxmtu);
+	
+#if 0 // I rewrote this function above
+	struct route_in6 sro6;
+	struct ifnet *ifp;
+	u_long maxmtu = 0;
+
+	KASSERT(inc != NULL, ("tcp_maxmtu6 with NULL in_conninfo pointer"));
+
+	bzero(&sro6, sizeof(sro6));
+	if (!IN6_IS_ADDR_UNSPECIFIED(&inc->inc6_faddr)) {
+		sro6.ro_dst.sin6_family = AF_INET6;
+		sro6.ro_dst.sin6_len = sizeof(struct sockaddr_in6);
+		sro6.ro_dst.sin6_addr = inc->inc6_faddr;
+		in6_rtalloc_ign(&sro6, 0, inc->inc_fibnum);
+	}
+	if (sro6.ro_rt != NULL) {
+		ifp = sro6.ro_rt->rt_ifp;
+		if (sro6.ro_rt->rt_mtu == 0)
+			maxmtu = IN6_LINKMTU(sro6.ro_rt->rt_ifp);
+		else
+			maxmtu = min(sro6.ro_rt->rt_mtu,
+				     IN6_LINKMTU(sro6.ro_rt->rt_ifp));
+
+		/* Report additional interface capabilities. */
+		if (cap != NULL) {
+			if (ifp->if_capenable & IFCAP_TSO6 &&
+			    ifp->if_hwassist & CSUM_TSO) {
+				cap->ifcap |= CSUM_TSO;
+				cap->tsomax = ifp->if_hw_tsomax;
+				cap->tsomaxsegcount = ifp->if_hw_tsomaxsegcount;
+				cap->tsomaxsegsize = ifp->if_hw_tsomaxsegsize;
+			}
+		}
+		RTFREE(sro6.ro_rt);
+	}
+
+	return (maxmtu);
+#endif
 }
