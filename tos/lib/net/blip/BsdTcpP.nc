@@ -81,8 +81,8 @@ module BsdTcpP {
         }
         printf("Timer %d fired!\n", timer_id);
         
-        tp = &tcbs[timer_id >> 2];
-        timer_id &= 0x3;
+        tp = &tcbs[timer_id >> 3];
+        timer_id &= 0x7;
         
         switch(timer_id) {
         case TOS_DELACK:
