@@ -1529,10 +1529,9 @@ dropwithreset:
 //	if (inp != NULL) {
     if (tp) {
 		tcp_dropwithreset(ip6, th, tp, tlen, rstreason);
-	}
 //		INP_WUNLOCK(inp);
-//	} else
-//		tcp_dropwithreset(ip6, th, NULL, tlen, rstreason);
+	} else
+		tcp_dropwithreset(ip6, th, NULL, tlen, rstreason);
 //	m = NULL;	/* mbuf chain got consumed. */
 	goto drop;
 
