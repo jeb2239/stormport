@@ -66,7 +66,7 @@ tcp_seq tcp_new_isn(struct tcpcb* tp) {
  
 /* This is based on tcp_init in tcp_subr.c. */
 void tcp_init(void) {
-#if 0 // I'M NOT USING A HASH TABLE TO STORE TCBS. I SUPPORT SUFFICIENTLY FEW THAT A LIST IS BETTER.
+#if 0 // I'M NOT USING A HASH TABLE TO STORE TCBS.
 	const char *tcbhash_tuneable;
 	int hashsize;
 

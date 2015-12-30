@@ -730,8 +730,14 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb
 
 	/*
 	 * Delay dropping TCP, IP headers, IPv6 ext headers, and TCP options.
+	 * Sam: My TCP header is in a different buffer from the IP header.
+	 * drop_hdrlen is only meaningful as an offset into the TCP buffer,
+	 * because it is used to determine how much of the packet to discard
+	 * before copying it into the receive buffer. Therefore, my offset does
+	 * not include the length of IP header and options, only the length of
+	 * the TCP header and options.
 	 */
-	drop_hdrlen = /*off0*/sizeof(struct ip6_hdr) + off; // Assume off0 is sizeof(struct ip6_hdr);
+	drop_hdrlen = /*off0 +*/ off; 
 
 	/*
 	 * Locate pcb for segment; if we're likely to add or remove a
@@ -1863,7 +1869,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				 * to th_ack.
 				 */
 				tp->snd_wl2 = th->th_ack;
-//				tp->t_dupacks = 0;
+				tp->t_dupacks = 0;
 //				m_freem(m);
 
 				/*
@@ -2010,10 +2016,13 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 						so->so_rcv.sb_flags &= ~SB_AUTOSIZE;
 				m_adj(m, drop_hdrlen);	/* delayed header drop */
 #endif
+		/* Sam: We just add the offset when copying into the receive buffer,
+       	  rather than adding it to the th pointer (which would be the closest
+       	  thing I could do to trimming an mbuf). */
 //				sbappendstream_locked(&so->so_rcv, m, 0);
 			if (!(tp->bufstate & TCB_CANTRCVMORE)) {
 				size_t usedbefore = cbuf_used_space(tp->recvbuf);
-				cbuf_write(tp->recvbuf, ((uint8_t*) th) + (th->th_off << 2), tlen);
+				cbuf_write(tp->recvbuf, ((uint8_t*) th) + drop_hdrlen, tlen);
 				if (usedbefore == 0 && tlen > 0) {
 					*signals |= SIG_RECVBUF_NOTEMPTY;
 				}
@@ -3088,7 +3097,8 @@ dodata:							/* XXX */
 	if ((tlen || (thflags & TH_FIN)) &&
 	    TCPS_HAVERCVDFIN(tp->t_state) == 0) {
 		tcp_seq save_start = th->th_seq;
-#if 0 // Again, we don't need to explicitly drop the header
+#if 0 /* Sam: We just add the offset when copying into the receive buffer,
+       * rather than adding it to the th pointer (which wouldn't work). */
 		m_adj(m, drop_hdrlen);	/* delayed header drop */
 #endif
 		/*
@@ -3123,7 +3133,7 @@ dodata:							/* XXX */
 				//sbappendstream_locked(&so->so_rcv, m, 0);
 			if (!(tp->bufstate & TCB_CANTRCVMORE)) {
 				size_t usedbefore = cbuf_used_space(tp->recvbuf);
-				cbuf_write(tp->recvbuf, ((uint8_t*) th) + (th->th_off << 2), tlen);
+				cbuf_write(tp->recvbuf, ((uint8_t*) th) + drop_hdrlen, tlen);
 				if (usedbefore == 0 && tlen > 0) {
 					*signals |= SIG_RECVBUF_NOTEMPTY;
 				}
