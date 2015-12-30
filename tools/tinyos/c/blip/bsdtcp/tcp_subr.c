@@ -58,7 +58,7 @@ const int V_tcp_v6mssdflt = FRAGLIMIT_6LOWPAN - sizeof(struct ip6_hdr) - sizeof(
 const int V_tcp_minmss = 70; // Barely enough for TCP header and all options. Default is 216.
 
 // A simple linear congruential number generator
-tcp_seq seed = (tcp_seq) 0xbeaddee3; 
+tcp_seq seed = (tcp_seq) 0xbeaddeed; 
 tcp_seq tcp_new_isn(struct tcpcb* tp) {
     seed = (((tcp_seq) 0xfaded011) * seed) + (tcp_seq) 0x1ead1eaf;
     return seed;

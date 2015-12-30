@@ -304,11 +304,7 @@ module BsdTcpP {
         th->th_sum = get_checksum(&msg->ip6_hdr.ip6_src, &msg->ip6_hdr.ip6_dst, th, tlen);
         inet_ntop6(&msg->ip6_hdr.ip6_dst, destaddr, 50);
         printf("Sending message to %s\n", destaddr);
-        if (tcp_new_isn(tp) < (tcp_seq) 3000000000) {
-        	printf("Return value: %d\n", call IP.send(msg));
-	    } else {
-	    	printf("Simulating packet loss\n");
-	    }
+        printf("Return value: %d\n", call IP.send(msg));
     }
     
     uint32_t get_ticks() {
