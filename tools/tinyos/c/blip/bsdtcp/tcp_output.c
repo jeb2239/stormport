@@ -46,10 +46,8 @@ cc_after_idle(struct tcpcb *tp)
 {
 //	INP_WLOCK_ASSERT(tp->t_inpcb);
 
-#if 0
 	if (CC_ALGO(tp)->after_idle != NULL)
 		CC_ALGO(tp)->after_idle(tp->ccv);
-#endif
 }
 
 long min(long a, long b) {

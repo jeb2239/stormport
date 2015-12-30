@@ -344,7 +344,7 @@ tcp_twstart(struct tcpcb *tp)
 	 * Note: soisdisconnected() call used to be made in tcp_discardcb(),
 	 * and might not be needed here any longer.
 	 */
-	tcp_cancel_timers(tp); /*tcp_discardcb(tp);*/
+	tcp_cancel_timers(tp); /*tcp_discardcb(tp);*/ // The discardcb() call needs to be moved to tcp_close()
 //	so = inp->inp_socket;
 //	soisdisconnected(so);
 //	tw->tw_cred = crhold(so->so_cred);

@@ -59,15 +59,22 @@
 /* Global CC vars. */
 extern STAILQ_HEAD(cc_head, cc_algo) cc_list;
 extern const int tcprexmtthresh;
+#endif
 extern struct cc_algo newreno_cc_algo;
 
+#if 0
 /* Per-netstack bits. */
 VNET_DECLARE(struct cc_algo *, default_cc_ptr);
 #define	V_default_cc_ptr VNET(default_cc_ptr)
 
 /* Define the new net.inet.tcp.cc sysctl tree. */
 SYSCTL_DECL(_net_inet_tcp_cc);
+#endif
 
+// Defined in cc/cc_newreno.c
+extern struct cc_algo* V_default_cc_ptr;
+
+#if 0
 /* CC housekeeping functions. */
 int	cc_register_algo(struct cc_algo *add_cc);
 int	cc_deregister_algo(struct cc_algo *remove_cc);

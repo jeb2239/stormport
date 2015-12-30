@@ -563,8 +563,8 @@ tcp_timer_rexmt(struct tcpcb *tp)
 			 * Reset the slow-start flight size
 			 * as it may depend on the new MSS.
 			 */
-//			if (CC_ALGO(tp)->conn_init != NULL)
-//				CC_ALGO(tp)->conn_init(tp->ccv);
+			if (CC_ALGO(tp)->conn_init != NULL)
+				CC_ALGO(tp)->conn_init(tp->ccv);
 		} else {
 			/*
 			 * If further retransmissions are still unsuccessful
@@ -586,8 +586,8 @@ tcp_timer_rexmt(struct tcpcb *tp)
 				 * Reset the slow-start flight size as it
 				 * may depend on the new MSS.
 				 */
-//				if (CC_ALGO(tp)->conn_init != NULL)
-//					CC_ALGO(tp)->conn_init(tp->ccv);
+				if (CC_ALGO(tp)->conn_init != NULL)
+					CC_ALGO(tp)->conn_init(tp->ccv);
 			}
 		}
 	}

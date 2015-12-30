@@ -36,7 +36,8 @@
 #include "tcp_var.h"
 #include "tcp_seq.h"
 #include "tcp_timer.h"
-#include "cbuf.c"
+#include "cbuf.h"
+#include "cc.h"
 
 /* EXTERN DECLARATIONS FROM TCP_TIMER.H */ 
 int tcp_keepinit;		/* time to establish connection */
@@ -219,7 +220,7 @@ void initialize_tcb(struct tcpcb* tp, uint16_t lport, int index) {
     tp->lport = lport;
     tp->index = index;
     // Congestion control algorithm. For now, don't include it.
-    // CC_ALGO(tp) = CC_DEFAULT();
+    CC_ALGO(tp) = CC_DEFAULT();
     tp->ccv = &tp->ccvdata;
     tp->ccv->type = IPPROTO_TCP;
 	tp->ccv->ccvc.tcp = tp;
@@ -263,6 +264,135 @@ void initialize_tcb(struct tcpcb* tp, uint16_t lport, int index) {
 	tp->t_maxseg = 50;
 }
 
+void
+tcp_discardcb(struct tcpcb *tp)
+{
+	tcp_cancel_timers(tp);
+	
+	/* Allow the CC algorithm to clean up after itself. */
+	if (CC_ALGO(tp)->cb_destroy != NULL)
+		CC_ALGO(tp)->cb_destroy(tp->ccv);
+
+//	khelp_destroy_osd(tp->osd);
+
+	CC_ALGO(tp) = NULL;
+#if 0 // Most of this is not applicable anymore. Above, I've copied the relevant parts.
+	struct inpcb *inp = tp->t_inpcb;
+	struct socket *so = inp->inp_socket;
+#ifdef INET6
+	int isipv6 = (inp->inp_vflag & INP_IPV6) != 0;
+#endif /* INET6 */
+	int released;
+
+	INP_WLOCK_ASSERT(inp);
+
+	/*
+	 * Make sure that all of our timers are stopped before we delete the
+	 * PCB.
+	 *
+	 * If stopping a timer fails, we schedule a discard function in same
+	 * callout, and the last discard function called will take care of
+	 * deleting the tcpcb.
+	 */
+	tcp_timer_stop(tp, TT_REXMT);
+	tcp_timer_stop(tp, TT_PERSIST);
+	tcp_timer_stop(tp, TT_KEEP);
+	tcp_timer_stop(tp, TT_2MSL);
+	tcp_timer_stop(tp, TT_DELACK);
+
+	/*
+	 * If we got enough samples through the srtt filter,
+	 * save the rtt and rttvar in the routing entry.
+	 * 'Enough' is arbitrarily defined as 4 rtt samples.
+	 * 4 samples is enough for the srtt filter to converge
+	 * to within enough % of the correct value; fewer samples
+	 * and we could save a bogus rtt. The danger is not high
+	 * as tcp quickly recovers from everything.
+	 * XXX: Works very well but needs some more statistics!
+	 */
+	if (tp->t_rttupdated >= 4) {
+		struct hc_metrics_lite metrics;
+		u_long ssthresh;
+
+		bzero(&metrics, sizeof(metrics));
+		/*
+		 * Update the ssthresh always when the conditions below
+		 * are satisfied. This gives us better new start value
+		 * for the congestion avoidance for new connections.
+		 * ssthresh is only set if packet loss occured on a session.
+		 *
+		 * XXXRW: 'so' may be NULL here, and/or socket buffer may be
+		 * being torn down.  Ideally this code would not use 'so'.
+		 */
+		ssthresh = tp->snd_ssthresh;
+		if (ssthresh != 0 && ssthresh < so->so_snd.sb_hiwat / 2) {
+			/*
+			 * convert the limit from user data bytes to
+			 * packets then to packet data bytes.
+			 */
+			ssthresh = (ssthresh + tp->t_maxseg / 2) / tp->t_maxseg;
+			if (ssthresh < 2)
+				ssthresh = 2;
+			ssthresh *= (u_long)(tp->t_maxseg +
+#ifdef INET6
+			    (isipv6 ? sizeof (struct ip6_hdr) +
+				sizeof (struct tcphdr) :
+#endif
+				sizeof (struct tcpiphdr)
+#ifdef INET6
+			    )
+#endif
+			    );
+		} else
+			ssthresh = 0;
+		metrics.rmx_ssthresh = ssthresh;
+
+		metrics.rmx_rtt = tp->t_srtt;
+		metrics.rmx_rttvar = tp->t_rttvar;
+		metrics.rmx_cwnd = tp->snd_cwnd;
+		metrics.rmx_sendpipe = 0;
+		metrics.rmx_recvpipe = 0;
+
+		tcp_hc_update(&inp->inp_inc, &metrics);
+	}
+
+	/* free the reassembly queue, if any */
+	tcp_reass_flush(tp);
+
+#ifdef TCP_OFFLOAD
+	/* Disconnect offload device, if any. */
+	if (tp->t_flags & TF_TOE)
+		tcp_offload_detach(tp);
+#endif
+		
+	tcp_free_sackholes(tp);
+
+#ifdef TCPPCAP
+	/* Free the TCP PCAP queues. */
+	tcp_pcap_drain(&(tp->t_inpkts));
+	tcp_pcap_drain(&(tp->t_outpkts));
+#endif
+
+	/* Allow the CC algorithm to clean up after itself. */
+	if (CC_ALGO(tp)->cb_destroy != NULL)
+		CC_ALGO(tp)->cb_destroy(tp->ccv);
+
+	khelp_destroy_osd(tp->osd);
+
+	CC_ALGO(tp) = NULL;
+	inp->inp_ppcb = NULL;
+	if ((tp->t_timers->tt_flags & TT_MASK) == 0) {
+		/* We own the last reference on tcpcb, let's free it. */
+		tp->t_inpcb = NULL;
+		uma_zfree(V_tcpcb_zone, tp);
+		released = in_pcbrele_wlocked(inp);
+		KASSERT(!released, ("%s: inp %p should not have been released "
+			"here", __func__, inp));
+	}
+#endif
+}
+
+
  /*
  * Attempt to close a TCP control block, marking it as dropped, and freeing
  * the socket if we hold the only reference.
@@ -271,8 +401,8 @@ struct tcpcb *
 tcp_close(struct tcpcb *tp)
 {
 	// Seriously, it looks like this is all this function does, that I'm concerned with
-	tcp_cancel_timers(tp);
 	tcp_state_change(tp, TCP6S_CLOSED); // for the print statement
+	tcp_discardcb(tp);
 	initialize_tcb(tp, tp->lport, tp->index);
 	return tp;
 #if 0

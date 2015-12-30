@@ -135,13 +135,11 @@ cc_ack_received(struct tcpcb *tp, struct tcphdr *th, uint16_t type)
 		}
 	}
 
-#if 0
 	if (CC_ALGO(tp)->ack_received != NULL) {
 		/* XXXLAS: Find a way to live without this */
 		tp->ccv->curack = th->th_ack;
 		CC_ALGO(tp)->ack_received(tp->ccv, type);
 	}
-#endif
 }
 
 static void inline
@@ -211,10 +209,9 @@ cc_conn_init(struct tcpcb *tp)
 		else
 			tp->snd_cwnd = 4 * tp->t_maxseg;
 	}
-#if 0
+
 	if (CC_ALGO(tp)->conn_init != NULL)
 		CC_ALGO(tp)->conn_init(tp->ccv);
-#endif
 }
 
 void inline
@@ -261,13 +258,12 @@ cc_cong_signal(struct tcpcb *tp, struct tcphdr *th, uint32_t type)
 		tp->t_badrxtwin = 0;
 		break;
 	}
-#if 0
+
 	if (CC_ALGO(tp)->cong_signal != NULL) {
 		if (th != NULL)
 			tp->ccv->curack = th->th_ack;
 		CC_ALGO(tp)->cong_signal(tp->ccv, type);
 	}
-#endif
 }
 
 static void inline
@@ -276,12 +272,10 @@ cc_post_recovery(struct tcpcb *tp, struct tcphdr *th)
 //	INP_WLOCK_ASSERT(tp->t_inpcb);
 
 	/* XXXLAS: KASSERT that we're in recovery? */
-#if 0
 	if (CC_ALGO(tp)->post_recovery != NULL) {
 		tp->ccv->curack = th->th_ack;
 		CC_ALGO(tp)->post_recovery(tp->ccv);
 	}
-#endif
 	/* XXXLAS: EXIT_RECOVERY ? */
 	tp->t_bytes_acked = 0;
 }
@@ -308,7 +302,7 @@ static void inline
 cc_ecnpkt_handler(struct tcpcb *tp, struct tcphdr *th, uint8_t iptos)
 {
 //	INP_WLOCK_ASSERT(tp->t_inpcb);
-#if 0
+
 	if (CC_ALGO(tp)->ecnpkt_handler != NULL) {
 		switch (iptos & IPTOS_ECN_MASK) {
 		case IPTOS_ECN_CE:
@@ -337,7 +331,6 @@ cc_ecnpkt_handler(struct tcpcb *tp, struct tcphdr *th, uint8_t iptos)
 		if (tp->ccv->flags & CCF_ACKNOW)
 			tcp_timer_activate(tp, TT_DELACK, tcp_delacktime);
 	}
-#endif
 }
 
 /*

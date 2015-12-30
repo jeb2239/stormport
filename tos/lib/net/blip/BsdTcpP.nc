@@ -47,6 +47,8 @@ module BsdTcpP {
 #include <bsdtcp/tcp_timewait.c>
 #include <bsdtcp/tcp_usrreq.c>
 #include <bsdtcp/checksum.c>
+#include <bsdtcp/cbuf.c>
+#include <bsdtcp/cc/cc_newreno.c>
 
     struct tcpcb tcbs[NUMBSDTCPACTIVESOCKETS];
     struct tcpcb_listen tcbls[NUMBSDTCPPASSIVESOCKETS];
