@@ -3147,6 +3147,12 @@ dodata:							/* XXX */
 			 * when trimming from the head.
 			 */
 //			thflags = tcp_reass(tp, th, &tlen, m);    NO SACK
+			/* Sam: Since we don't have a reassembly queue, we need to make sure
+			 * that thflags doesn't have the TH_FIN bit set (since we haven't
+			 * stored the fact that we got a FIN). I don't have to worry about
+			 * any of the other bits (since this function doesn't look at any
+			 * of them after this point, so I can safely set thflags to zero. */
+			thflags = 0;
 			tp->t_flags |= TF_ACKNOW;
 		}
 //		if (tlen > 0 && (tp->t_flags & TF_SACK_PERMIT))
