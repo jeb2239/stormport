@@ -34,6 +34,7 @@
 #define _NETINET_TCP_VAR_H_
 
 //#include <netinet/tcp.h>
+#include "cc.h"
 #include "tcp.h"
 #include "types.h"
 
@@ -234,10 +235,9 @@ struct tcpcb {
 //	int	t_rcvoopack;		/* out-of-order packets received */
 //	void	*t_toe;			/* TOE pcb pointer */
 	int	t_bytes_acked;		/* # bytes acked during current RTT */
-#if 0 // Ignore Congestion Control for now. Can add it in later.
 	struct cc_algo	*cc_algo;	/* congestion control algorithm */
 	struct cc_var	*ccv;		/* congestion control specific vars */
-#endif
+	struct cc_var	ccvdata;	/* Actual data that ccv points to */
 #if 0
 	struct osd	*osd;		/* storage for Khelp module data */
 #endif

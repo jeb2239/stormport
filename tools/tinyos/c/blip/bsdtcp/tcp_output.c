@@ -37,11 +37,20 @@
 #include "tcp_seq.h"
 #include "tcp_timer.h"
 #include "cbuf.h"
- 
-#define cc_after_idle(x)
 
 // From ip_compat.h
 #define	bcopy(a,b,c)	memmove(b,a,c)
+
+static void inline
+cc_after_idle(struct tcpcb *tp)
+{
+//	INP_WLOCK_ASSERT(tp->t_inpcb);
+
+#if 0
+	if (CC_ALGO(tp)->after_idle != NULL)
+		CC_ALGO(tp)->after_idle(tp->ccv);
+#endif
+}
 
 long min(long a, long b) {
 	if (a < b) {
@@ -143,10 +152,9 @@ tcp_output(struct tcpcb *tp)
 	 * to send, then transmit; otherwise, investigate further.
 	 */
 	idle = (tp->t_flags & TF_LASTIDLE) || (tp->snd_max == tp->snd_una);
-#if 0
 	if (idle && ticks - tp->t_rcvtime >= tp->t_rxtcur)
 		cc_after_idle(tp);
-#endif
+
 	tp->t_flags &= ~TF_LASTIDLE;
 	if (idle) {
 		if (tp->t_flags & TF_MORETOCOME) {
@@ -171,7 +179,7 @@ again:
 #endif
 	mtu = 0;
 	off = tp->snd_nxt - tp->snd_una;
-	sendwin = tp->snd_wnd;//min(tp->snd_wnd, tp->snd_cwnd);
+	sendwin = min(tp->snd_wnd, tp->snd_cwnd);
 
 	flags = tcp_outflags[tp->t_state];
 	/*

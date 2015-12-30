@@ -33,6 +33,11 @@
 
 #ifndef _NETINET_IP_H_
 #define	_NETINET_IP_H_
+
+// Copied from in.h
+#define IPPROTO_TCP 6
+
+
 #if 0
 #include <sys/cdefs.h>
 

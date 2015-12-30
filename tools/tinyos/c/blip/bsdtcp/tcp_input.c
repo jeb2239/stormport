@@ -90,6 +90,9 @@ int tcp_fast_finwait2_recycle = 0;
 const int V_tcp_do_sack = 0;
 const int V_path_mtu_discovery = 0;
 const int V_tcp_delack_enabled = 1;
+const int V_tcp_initcwnd_segments = 0;
+const int V_tcp_do_rfc3390 = 0;
+const int V_tcp_abc_l_var = 2; // this is what was in the original tcp_input.c
 
 // Copied from sys/libkern.h
 static int imax(int a, int b) { return (a > b ? a : b); }
@@ -101,6 +104,188 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
     struct tcpcb *tp, int drop_hdrlen, int tlen, uint8_t iptos,
     uint8_t* signals);
 static void	 tcp_xmit_timer(struct tcpcb *, int);
+void tcp_hc_get(/*struct in_conninfo *inc*/ struct tcpcb* tp, struct hc_metrics_lite *hc_metrics_lite);
+static void	 tcp_newreno_partial_ack(struct tcpcb *, struct tcphdr *);
+
+/*
+ * CC wrapper hook functions
+ */
+static void inline
+cc_ack_received(struct tcpcb *tp, struct tcphdr *th, uint16_t type)
+{
+//	INP_WLOCK_ASSERT(tp->t_inpcb);
+
+	tp->ccv->bytes_this_ack = BYTES_THIS_ACK(tp, th);
+	if (tp->snd_cwnd <= tp->snd_wnd)
+		tp->ccv->flags |= CCF_CWND_LIMITED;
+	else
+		tp->ccv->flags &= ~CCF_CWND_LIMITED;
+
+	if (type == CC_ACK) {
+		if (tp->snd_cwnd > tp->snd_ssthresh) {
+			tp->t_bytes_acked += min(tp->ccv->bytes_this_ack,
+			     V_tcp_abc_l_var * tp->t_maxseg);
+			if (tp->t_bytes_acked >= tp->snd_cwnd) {
+				tp->t_bytes_acked -= tp->snd_cwnd;
+				tp->ccv->flags |= CCF_ABC_SENTAWND;
+			}
+		} else {
+				tp->ccv->flags &= ~CCF_ABC_SENTAWND;
+				tp->t_bytes_acked = 0;
+		}
+	}
+
+#if 0
+	if (CC_ALGO(tp)->ack_received != NULL) {
+		/* XXXLAS: Find a way to live without this */
+		tp->ccv->curack = th->th_ack;
+		CC_ALGO(tp)->ack_received(tp->ccv, type);
+	}
+#endif
+}
+
+static void inline
+cc_conn_init(struct tcpcb *tp)
+{
+	struct hc_metrics_lite metrics;
+//	struct inpcb *inp = tp->t_inpcb;
+	int rtt;
+
+//	INP_WLOCK_ASSERT(tp->t_inpcb);
+
+	tcp_hc_get(/*&inp->inp_inc*/tp, &metrics);
+
+	if (tp->t_srtt == 0 && (rtt = metrics.rmx_rtt)) {
+		tp->t_srtt = rtt;
+		tp->t_rttbest = tp->t_srtt + TCP_RTT_SCALE;
+//		TCPSTAT_INC(tcps_usedrtt);
+		if (metrics.rmx_rttvar) {
+			tp->t_rttvar = metrics.rmx_rttvar;
+//			TCPSTAT_INC(tcps_usedrttvar);
+		} else {
+			/* default variation is +- 1 rtt */
+			tp->t_rttvar =
+			    tp->t_srtt * TCP_RTTVAR_SCALE / TCP_RTT_SCALE;
+		}
+		TCPT_RANGESET(tp->t_rxtcur,
+		    ((tp->t_srtt >> 2) + tp->t_rttvar) >> 1,
+		    tp->t_rttmin, TCPTV_REXMTMAX);
+	}
+	if (metrics.rmx_ssthresh) {
+		/*
+		 * There's some sort of gateway or interface
+		 * buffer limit on the path.  Use this to set
+		 * the slow start threshhold, but set the
+		 * threshold to no less than 2*mss.
+		 */
+		tp->snd_ssthresh = max(2 * tp->t_maxseg, metrics.rmx_ssthresh);
+//		TCPSTAT_INC(tcps_usedssthresh);
+	}
+
+	/*
+	 * Set the initial slow-start flight size.
+	 *
+	 * RFC5681 Section 3.1 specifies the default conservative values.
+	 * RFC3390 specifies slightly more aggressive values.
+	 * RFC6928 increases it to ten segments.
+	 * Support for user specified value for initial flight size.
+	 *
+	 * If a SYN or SYN/ACK was lost and retransmitted, we have to
+	 * reduce the initial CWND to one segment as congestion is likely
+	 * requiring us to be cautious.
+	 */
+	if (tp->snd_cwnd == 1)
+		tp->snd_cwnd = tp->t_maxseg;		/* SYN(-ACK) lost */
+	else if (V_tcp_initcwnd_segments)
+		tp->snd_cwnd = min(V_tcp_initcwnd_segments * tp->t_maxseg,
+		    max(2 * tp->t_maxseg, V_tcp_initcwnd_segments * 1460));
+	else if (V_tcp_do_rfc3390)
+		tp->snd_cwnd = min(4 * tp->t_maxseg,
+		    max(2 * tp->t_maxseg, 4380));
+	else {
+		/* Per RFC5681 Section 3.1 */
+		if (tp->t_maxseg > 2190)
+			tp->snd_cwnd = 2 * tp->t_maxseg;
+		else if (tp->t_maxseg > 1095)
+			tp->snd_cwnd = 3 * tp->t_maxseg;
+		else
+			tp->snd_cwnd = 4 * tp->t_maxseg;
+	}
+#if 0
+	if (CC_ALGO(tp)->conn_init != NULL)
+		CC_ALGO(tp)->conn_init(tp->ccv);
+#endif
+}
+
+void inline
+cc_cong_signal(struct tcpcb *tp, struct tcphdr *th, uint32_t type)
+{
+//	INP_WLOCK_ASSERT(tp->t_inpcb);
+
+	switch(type) {
+	case CC_NDUPACK:
+		if (!IN_FASTRECOVERY(tp->t_flags)) {
+			tp->snd_recover = tp->snd_max;
+			if (tp->t_flags & TF_ECN_PERMIT)
+				tp->t_flags |= TF_ECN_SND_CWR;
+		}
+		break;
+	case CC_ECN:
+		if (!IN_CONGRECOVERY(tp->t_flags)) {
+//			TCPSTAT_INC(tcps_ecn_rcwnd);
+			tp->snd_recover = tp->snd_max;
+			if (tp->t_flags & TF_ECN_PERMIT)
+				tp->t_flags |= TF_ECN_SND_CWR;
+		}
+		break;
+	case CC_RTO:
+		tp->t_dupacks = 0;
+		tp->t_bytes_acked = 0;
+		EXIT_RECOVERY(tp->t_flags);
+		tp->snd_ssthresh = max(2, min(tp->snd_wnd, tp->snd_cwnd) / 2 /
+		    tp->t_maxseg) * tp->t_maxseg;
+		tp->snd_cwnd = tp->t_maxseg;
+		break;
+	case CC_RTO_ERR:
+//		TCPSTAT_INC(tcps_sndrexmitbad);
+		/* RTO was unnecessary, so reset everything. */
+		tp->snd_cwnd = tp->snd_cwnd_prev;
+		tp->snd_ssthresh = tp->snd_ssthresh_prev;
+		tp->snd_recover = tp->snd_recover_prev;
+		if (tp->t_flags & TF_WASFRECOVERY)
+			ENTER_FASTRECOVERY(tp->t_flags);
+		if (tp->t_flags & TF_WASCRECOVERY)
+			ENTER_CONGRECOVERY(tp->t_flags);
+		tp->snd_nxt = tp->snd_max;
+		tp->t_flags &= ~TF_PREVVALID;
+		tp->t_badrxtwin = 0;
+		break;
+	}
+#if 0
+	if (CC_ALGO(tp)->cong_signal != NULL) {
+		if (th != NULL)
+			tp->ccv->curack = th->th_ack;
+		CC_ALGO(tp)->cong_signal(tp->ccv, type);
+	}
+#endif
+}
+
+static void inline
+cc_post_recovery(struct tcpcb *tp, struct tcphdr *th)
+{
+//	INP_WLOCK_ASSERT(tp->t_inpcb);
+
+	/* XXXLAS: KASSERT that we're in recovery? */
+#if 0
+	if (CC_ALGO(tp)->post_recovery != NULL) {
+		tp->ccv->curack = th->th_ack;
+		CC_ALGO(tp)->post_recovery(tp->ccv);
+	}
+#endif
+	/* XXXLAS: EXIT_RECOVERY ? */
+	tp->t_bytes_acked = 0;
+}
+
 
 /*
  * Indicate whether this ack should be delayed.  We can delay the ack if
@@ -118,6 +303,42 @@ static void	 tcp_xmit_timer(struct tcpcb *, int);
 	    (tp->t_flags & TF_RXWIN0SENT) == 0) &&			\
 	    (tlen <= tp->t_maxopd) &&					\
 	    (V_tcp_delack_enabled || (tp->t_flags & TF_NEEDSYN)))
+
+static void inline
+cc_ecnpkt_handler(struct tcpcb *tp, struct tcphdr *th, uint8_t iptos)
+{
+//	INP_WLOCK_ASSERT(tp->t_inpcb);
+#if 0
+	if (CC_ALGO(tp)->ecnpkt_handler != NULL) {
+		switch (iptos & IPTOS_ECN_MASK) {
+		case IPTOS_ECN_CE:
+		    tp->ccv->flags |= CCF_IPHDR_CE;
+		    break;
+		case IPTOS_ECN_ECT0:
+		    tp->ccv->flags &= ~CCF_IPHDR_CE;
+		    break;
+		case IPTOS_ECN_ECT1:
+		    tp->ccv->flags &= ~CCF_IPHDR_CE;
+		    break;
+		}
+
+		if (th->th_flags & TH_CWR)
+			tp->ccv->flags |= CCF_TCPHDR_CWR;
+		else
+			tp->ccv->flags &= ~CCF_TCPHDR_CWR;
+
+		if (tp->t_flags & TF_DELACK)
+			tp->ccv->flags |= CCF_DELACK;
+		else
+			tp->ccv->flags &= ~CCF_DELACK;
+
+		CC_ALGO(tp)->ecnpkt_handler(tp->ccv);
+
+		if (tp->ccv->flags & CCF_ACKNOW)
+			tcp_timer_activate(tp, TT_DELACK, tcp_delacktime);
+	}
+#endif
+}
 
 /*
  * External function: look up an entry in the hostcache and fill out the
@@ -1586,12 +1807,12 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				/*
 				 * "bad retransmit" recovery.
 				 */
-/*				if (tp->t_rxtshift == 1 &&
+				if (tp->t_rxtshift == 1 &&
 				    tp->t_flags & TF_PREVVALID &&
 				    (int)(ticks - tp->t_badrxtwin) < 0) {
 					cc_cong_signal(tp, th, CC_RTO_ERR);
 				}
-*/
+
 				/*
 				 * Recalculate the transmit timer / rtt.
 				 *
@@ -1641,7 +1862,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				 * typically means increasing the congestion
 				 * window.
 				 */
-//				cc_ack_received(tp, th, CC_ACK);
+				cc_ack_received(tp, th, CC_ACK);
 
 				tp->snd_una = th->th_ack;
 				/*
@@ -1934,7 +2155,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				*signals |= SIG_CONN_ESTABLISHED;
 //				TCP_PROBE5(connect__established, NULL, tp,
 //				    mtod(m, const char *), tp, th);
-//				cc_conn_init(tp);
+				cc_conn_init(tp);
 				tcp_timer_activate(tp, TT_KEEP,
 				    TP_KEEPIDLE(tp));
 			}
@@ -2318,15 +2539,15 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		} else {
 			tcp_state_change(tp, TCPS_ESTABLISHED);
 			*signals |= SIG_CONN_ESTABLISHED;
+//			TCP_PROBE5(accept__established, NULL, tp,
+//			    mtod(m, const char *), tp, th);
+			cc_conn_init(tp);
+			tcp_timer_activate(tp, TT_KEEP, TP_KEEPIDLE(tp));
 			if (!tp->passiveopen) { // Added by Sam: Accounts for simultaneous open
 				// If this socket was opened actively, then the fact we are in SYN-RECEIVED indicates a simultaneous open
 				// Don't ACK the SYN-ACK, in that case (unless it contains data or something, which will be processed later)
 				tp->t_flags &= ~TF_ACKNOW;
 			}
-//			TCP_PROBE5(accept__established, NULL, tp,
-//			    mtod(m, const char *), tp, th);
-//			cc_conn_init(tp);
-			tcp_timer_activate(tp, TT_KEEP, TP_KEEPIDLE(tp));
 		}
 		/*
 		 * If segment contains data or ACK, will call tcp_reass()
@@ -2415,7 +2636,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 					tp->t_dupacks = 0;
 				else if (++tp->t_dupacks > tcprexmtthresh ||
 				     IN_FASTRECOVERY(tp->t_flags)) {
-//					cc_ack_received(tp, th, CC_DUPACK);
+					cc_ack_received(tp, th, CC_DUPACK);
 #if 0
 					if ((tp->t_flags & TF_SACK_PERMIT) &&
 					    IN_FASTRECOVERY(tp->t_flags)) {
@@ -2462,8 +2683,8 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 						}
 					}
 					/* Congestion signal before ack. */
-//					cc_cong_signal(tp, th, CC_NDUPACK);
-//					cc_ack_received(tp, th, CC_DUPACK);
+					cc_cong_signal(tp, th, CC_NDUPACK);
+					cc_ack_received(tp, th, CC_DUPACK);
 					tcp_timer_activate(tp, TT_REXMT, 0);
 					tp->t_rtttime = 0;
 #if 0
@@ -2499,12 +2720,14 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 					 * segment. Restore the original
 					 * snd_cwnd after packet transmission.
 					 */
-//					cc_ack_received(tp, th, CC_DUPACK);
-					u_long oldcwnd = tp->snd_cwnd;
-					tcp_seq oldsndmax = tp->snd_max;
+					u_long oldcwnd;
+					tcp_seq oldsndmax;
 					u_int sent;
 					int avail;
-
+					cc_ack_received(tp, th, CC_DUPACK);
+					oldcwnd = tp->snd_cwnd;
+					oldsndmax = tp->snd_max;
+					
 					KASSERT(tp->t_dupacks == 1 ||
 					    tp->t_dupacks == 2,
 					    ("%s: dupacks not 1 or 2",
@@ -2553,17 +2776,16 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		 * If the congestion window was inflated to account
 		 * for the other side's cached packets, retract it.
 		 */
-#if 0
 		if (IN_FASTRECOVERY(tp->t_flags)) {
 			if (SEQ_LT(th->th_ack, tp->snd_recover)) {
 //				if (tp->t_flags & TF_SACK_PERMIT)
 //					tcp_sack_partialack(tp, th);
 //				else
 					tcp_newreno_partial_ack(tp, th);
-			}// else
-//				cc_post_recovery(tp, th);
+			} else
+				cc_post_recovery(tp, th);
 		}
-#endif
+		
 		tp->t_dupacks = 0;
 		/*
 		 * If we reach this point, ACK is not a duplicate,
@@ -2602,10 +2824,10 @@ process_ACK:
 		 * original cwnd and ssthresh, and proceed to transmit where
 		 * we left off.
 		 */
-/*		if (tp->t_rxtshift == 1 && tp->t_flags & TF_PREVVALID &&
+		if (tp->t_rxtshift == 1 && tp->t_flags & TF_PREVVALID &&
 		    (int)(ticks - tp->t_badrxtwin) < 0)
 			cc_cong_signal(tp, th, CC_RTO_ERR);
-*/
+
 		/*
 		 * If we have a timestamp reply, update smoothed
 		 * round trip time.  If no timestamp is present but
@@ -2659,7 +2881,7 @@ process_ACK:
 		 * control related information. This typically means increasing
 		 * the congestion window.
 		 */
-//		cc_ack_received(tp, th, CC_ACK);
+		cc_ack_received(tp, th, CC_ACK);
 
 //		SOCKBUF_LOCK(&so->so_snd);
 		if (acked > /*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf)) {
@@ -3625,5 +3847,43 @@ tcp_mssopt(/*struct in_conninfo *inc*/struct tcpcb* tp)
 		mss = max(maxmtu, thcmtu) - min_protoh;
 
 	return (mss);
+}
+
+/*
+ * On a partial ack arrives, force the retransmission of the
+ * next unacknowledged segment.  Do not clear tp->t_dupacks.
+ * By setting snd_nxt to ti_ack, this forces retransmission timer to
+ * be started again.
+ */
+static void
+tcp_newreno_partial_ack(struct tcpcb *tp, struct tcphdr *th)
+{
+	tcp_seq onxt = tp->snd_nxt;
+	u_long  ocwnd = tp->snd_cwnd;
+
+//	INP_WLOCK_ASSERT(tp->t_inpcb);
+
+	tcp_timer_activate(tp, TT_REXMT, 0);
+	tp->t_rtttime = 0;
+	tp->snd_nxt = th->th_ack;
+	/*
+	 * Set snd_cwnd to one segment beyond acknowledged offset.
+	 * (tp->snd_una has not yet been updated when this function is called.)
+	 */
+	tp->snd_cwnd = tp->t_maxseg + BYTES_THIS_ACK(tp, th);
+	tp->t_flags |= TF_ACKNOW;
+	(void) tcp_output(tp);
+	tp->snd_cwnd = ocwnd;
+	if (SEQ_GT(onxt, tp->snd_nxt))
+		tp->snd_nxt = onxt;
+	/*
+	 * Partial window deflation.  Relies on fact that tp->snd_una
+	 * not updated yet.
+	 */
+	if (tp->snd_cwnd > BYTES_THIS_ACK(tp, th))
+		tp->snd_cwnd -= BYTES_THIS_ACK(tp, th);
+	else
+		tp->snd_cwnd = 0;
+	tp->snd_cwnd += tp->t_maxseg;
 }
 

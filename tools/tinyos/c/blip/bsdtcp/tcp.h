@@ -155,16 +155,13 @@ struct tcphdr {
 					/* max space left for options */
 //#endif /* __BSD_VISIBLE */
 
-// Sam: FOR NOW, I'M GOING TO COMMENT THIS OUT (since I'm not going to support setsockopt)
-#if 0
-
 /*
  * User-settable options (used with setsockopt).  These are discrete
  * values and are not masked together.  Some values appear to be
  * bitmasks for historical reasons.
  */
 #define	TCP_NODELAY	1	/* don't delay send to coalesce packets */
-#if __BSD_VISIBLE
+//#if __BSD_VISIBLE
 #define	TCP_MAXSEG	2	/* set maximum segment size */
 #define TCP_NOPUSH	4	/* don't push last block of write */
 #define TCP_NOOPT	8	/* don't use TCP options */
@@ -201,7 +198,7 @@ struct tcphdr {
  * XXX: This is currently an unstable ABI/API, in that it is expected to
  * change.
  */
-
+#if 0
 struct tcp_info {
 	u_int8_t	tcpi_state;		/* TCP FSM state. */
 	u_int8_t	__tcpi_ca_state;
@@ -256,7 +253,6 @@ struct tcp_info {
 	u_int32_t	__tcpi_pad[26];		/* Padding. */
 };
 #endif
-
-#endif
+//#endif
 
 #endif /* !_NETINET_TCP_H_ */
