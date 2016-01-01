@@ -15,7 +15,7 @@ module BSDTCPDriverP {
     #include <bsdtcp/tcp_fsm.h>
     
     typedef struct {
-        tcp_full_callback_t connectDone;
+        tcp_lite_callback_t connectDone;
         tcp_lite_callback_t sendReady;
         tcp_lite_callback_t recvReady;
         tcp_lite_callback_t connectionLost;
@@ -29,17 +29,17 @@ module BSDTCPDriverP {
     } passive_socket_t;
     
     /* Bitmasks that record which sockets are currently allocated. */
-    uint32_t activemask;
-    uint32_t passivemask;
+    norace uint32_t activemask;
+    norace uint32_t passivemask;
     
     /* Socket structures. */
-    active_socket_t activesockets[NUMSOCKETS];
-    passive_socket_t passivesockets[NUMSOCKETS];
+    norace active_socket_t activesockets[NUMSOCKETS];
+    norace passive_socket_t passivesockets[NUMSOCKETS];
     
     /* For remembering the callback. */
-    bool passive;
-    uint8_t socket_idx;
-    uint8_t cb_type;
+    norace bool passive;
+    norace uint8_t socket_idx;
+    norace uint8_t cb_type;
     
     void clear_activesocket(int i) {
         activesockets[i].connectDone.addr = 0;
@@ -99,7 +99,7 @@ module BSDTCPDriverP {
     tcp_lite_callback_t* get_callback(uint8_t sock_idx, uint8_t cbt) {
         switch (cbt) {
         case CONNECT_DONE:
-            return (tcp_lite_callback_t*) &activesockets[sock_idx].connectDone;
+            return &activesockets[sock_idx].connectDone;
         case SEND_READY:
             return &activesockets[sock_idx].sendReady;
         case RECV_READY:
@@ -141,7 +141,7 @@ module BSDTCPDriverP {
     }
     
     event void BSDTCPPassiveSocket.acceptDone[uint8_t pi](struct sockaddr_in6* addr, int asockid) {
-        passivesockets[pi].acceptDone.arg0 = (uint16_t) passivesockets[pi].acceptinginto;
+        passivesockets[pi].acceptDone.arg0 = (uint8_t) passivesockets[pi].acceptinginto;
         memcpy(&passivesockets[pi].acceptDone.src_address, &addr->sin6_addr, sizeof(struct in6_addr));
         passivesockets[pi].acceptDone.src_port = ntohs(addr->sin6_port);
         passivesockets[pi].readycbs |= ACCEPT_DONE;
@@ -150,8 +150,6 @@ module BSDTCPDriverP {
     }
     
     event void BSDTCPActiveSocket.connectDone[uint8_t ai](struct sockaddr_in6* addr) {
-        memcpy(&activesockets[ai].connectDone.src_address, &addr->sin6_addr, sizeof(struct in6_addr));
-        activesockets[ai].connectDone.src_port = ntohs(addr->sin6_port);
         activesockets[ai].readycbs |= CONNECT_DONE;
         printf("Connection done!\n");
     }
@@ -167,7 +165,7 @@ module BSDTCPDriverP {
     }
     
     event void BSDTCPActiveSocket.connectionLost[uint8_t ai](uint8_t how) {
-        activesockets[ai].connectionLost.arg0 = (uint16_t) how;
+        activesockets[ai].connectionLost.arg0 = how;
         activesockets[ai].readycbs |= CONNECTION_LOST;
         printf("Connection lost!\n");
     }
@@ -405,7 +403,7 @@ module BSDTCPDriverP {
                 if (fd < 0 || passive) {
                     break;
                 }
-                tostore = (tcp_lite_callback_t*) &activesockets[fd].connectDone;
+                tostore = &activesockets[fd].connectDone;
                 goto setcb;
             case 0x0b: // set_sendReady_cb(fd, cb, r)
                 if (fd < 0 || passive) {

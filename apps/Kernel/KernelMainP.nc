@@ -427,12 +427,12 @@ implementation
                     switch (c->type) {
                         case SEND_READY:
                         case RECV_READY:
+                        case CONNECT_DONE:
                             __inject_function1((void*) c->addr, c->r);
                             break;
                         case CONNECTION_LOST:
                             __inject_function2((void*) c->addr, c->r, (uint32_t) c->arg0);
                             break;
-                        case CONNECT_DONE:
                         case ACCEPT_DONE:
                             cf = (tcp_full_callback_t*) cb;
                             inet_ntop6(&cf->src_address, v6addr, 40);
