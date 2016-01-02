@@ -105,6 +105,9 @@ struct tcpcb_listen {
 #define tpcantrcvmore(tp) (tp)->bufstate |= TCB_CANTRCVMORE
 #define tpcantsendmore(tp) (tp)->bufstate |= TCB_CANTSENDMORE
 
+#define SENDBUF_SIZE 130
+#define RECVBUF_SIZE 130
+
 /*
  * Tcp control block, one per tcp; fields:
  * Organized for 16 byte cacheline efficiency.
@@ -118,8 +121,8 @@ struct tcpcb {
 	bool passiveopen; // Remembers if this TCB was initialized via a passive open or active open
 	
 	uint8_t bufstate;
-	uint8_t sendbuf[100];
-	uint8_t recvbuf[100];
+	uint8_t sendbuf[SENDBUF_SIZE];
+	uint8_t recvbuf[RECVBUF_SIZE];
 	
 	uint16_t lport; // local port, network byte order
 	uint16_t fport; // foreign port, network byte order

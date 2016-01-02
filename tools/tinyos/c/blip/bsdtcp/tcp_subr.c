@@ -254,14 +254,11 @@ void initialize_tcb(struct tcpcb* tp, uint16_t lport, int index) {
 	/* From tcp_usr_attach in tcp_usrreq.c. */
 	tp->t_state = TCP6S_CLOSED;
 	
-	rv1 = cbuf_init(tp->sendbuf, 100);
-	rv2 = cbuf_init(tp->recvbuf, 100);
+	rv1 = cbuf_init(tp->sendbuf, SENDBUF_SIZE);
+	rv2 = cbuf_init(tp->recvbuf, RECVBUF_SIZE);
 	if (rv1 != 0 || rv2 != 0) {
 		printf("Buffers too small!\n");
 	}
-	
-	tp->t_maxopd = 60; // don't change dynamically. These are conservative estimates.
-	tp->t_maxseg = 50;
 }
 
 void
