@@ -351,7 +351,7 @@ module BSDTCPDriverP {
                     break;
                 }
                 passivesockets[fd].acceptinginto = afd;
-                call BSDTCPPassiveSocket.listenaccept[fd](call BSDTCPActiveSocket.getID[afd]());
+                rv = (syscall_rv_t) call BSDTCPPassiveSocket.listenaccept[fd](call BSDTCPActiveSocket.getID[afd]());
                 printf("Accepting into socket %d\n", afd);
                 break;
             case 0x05: // send(fd, buffer, length, numbytes)
