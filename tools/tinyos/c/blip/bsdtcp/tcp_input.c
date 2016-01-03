@@ -72,6 +72,8 @@
  * settings are handled in tcp_mssopt().
  */
 
+#include "bitmap.h"
+#include "cbuf.h"
 #include "icmp_var.h"
 #include "ip.h"
 #include "ip6.h"
@@ -1771,6 +1773,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	    tiwin && tiwin == tp->snd_wnd && 
 	    ((tp->t_flags & (TF_NEEDSYN|TF_NEEDFIN)) == 0) &&
 	    /*LIST_EMPTY(&tp->t_segq) &&*/
+	    bmp_isempty(tp->reassbmp, REASSBMP_SIZE) && // Added by Sam
 	    ((to.to_flags & TOF_TS) == 0 ||
 	     TSTMP_GEQ(to.to_tsval, tp->ts_recent)) ) {
 
@@ -2554,11 +2557,10 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		 * If segment contains data or ACK, will call tcp_reass()
 		 * later; if not, do so now to pass queued data to user.
 		 */
-/* Don't need to reassemble TCP segments
 		if (tlen == 0 && (thflags & TH_FIN) == 0)
 			(void) tcp_reass(tp, (struct tcphdr *)0, 0,
-			    (struct mbuf *)0);
-*/
+			    (/*struct mbuf **/ uint8_t*)0, signals);
+			    
 		tp->snd_wl1 = th->th_seq - 1;
 		/* FALLTHROUGH */
 
@@ -3113,7 +3115,8 @@ dodata:							/* XXX */
 		 * fast retransmit can work).
 		 */
 		if (th->th_seq == tp->rcv_nxt &&
-		    /*LIST_EMPTY(&tp->t_segq) &&*/ // NO SACK
+		    /*LIST_EMPTY(&tp->t_segq) &&*/
+		    bmp_isempty(tp->reassbmp, REASSBMP_SIZE) && // Added by Sam
 		    TCPS_HAVEESTABLISHED(tp->t_state)) {
 			if (DELAY_ACK(tp, tlen))
 				tp->t_flags |= TF_DELACK;
@@ -3146,15 +3149,10 @@ dodata:							/* XXX */
 			 * m_adj() doesn't actually frees any mbufs
 			 * when trimming from the head.
 			 */
-//			thflags = tcp_reass(tp, th, &tlen, m);    NO SACK
-			/* Sam: Since we don't have a reassembly queue, we need to make sure
-			 * that thflags doesn't have the TH_FIN bit set (since we haven't
-			 * stored the fact that we got a FIN). I don't have to worry about
-			 * any of the other bits (since this function doesn't look at any
-			 * of them after this point, so I can safely set thflags to zero. */
-			thflags = 0;
+			thflags = tcp_reass(tp, th, &tlen, ((uint8_t*) th) + drop_hdrlen, signals);
 			tp->t_flags |= TF_ACKNOW;
 		}
+		// Only place tlen is used after the call to tcp_reass is below
 //		if (tlen > 0 && (tp->t_flags & TF_SACK_PERMIT))
 //			tcp_update_sack_list(tp, save_start, save_start + tlen);
 #if 0 // This was originally there, not me commenting out things

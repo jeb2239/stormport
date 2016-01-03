@@ -50,7 +50,7 @@ VNET_DECLARE(int, tcp_do_rfc1323);
 
 #endif /* _KERNEL */
 
-#if 0 // MAYBE I ACTUALLY NEED THIS. IF I DO, I'LL UNCOMMENT THIS LATER.
+#if 0 // I have a segment queue, but not impplemented like this
 /* TCP segment queue entry */
 struct tseg_qent {
 	LIST_ENTRY(tseg_qent) tqe_q;
@@ -105,8 +105,10 @@ struct tcpcb_listen {
 #define tpcantrcvmore(tp) (tp)->bufstate |= TCB_CANTRCVMORE
 #define tpcantsendmore(tp) (tp)->bufstate |= TCB_CANTSENDMORE
 
-#define SENDBUF_SIZE 130
+#define CBUF_OVERHEAD 12
+#define SENDBUF_SIZE 123
 #define RECVBUF_SIZE 130
+#define REASSBMP_SIZE (((RECVBUF_SIZE - CBUF_OVERHEAD) >> 3) + (((RECVBUF_SIZE - CBUF_OVERHEAD) & 0x7) ? 1 : 0))
 
 /*
  * Tcp control block, one per tcp; fields:
@@ -123,6 +125,8 @@ struct tcpcb {
 	uint8_t bufstate;
 	uint8_t sendbuf[SENDBUF_SIZE];
 	uint8_t recvbuf[RECVBUF_SIZE];
+	uint8_t reassbmp[REASSBMP_SIZE];
+	int16_t reass_fin_index;
 	
 	uint16_t lport; // local port, network byte order
 	uint16_t fport; // foreign port, network byte order
@@ -618,8 +622,9 @@ void	 tcpip_fillheaders(struct /*inp*/tcpcb *, void *, void *);
 u_long	 tcp_maxmtu6(/*struct in_conninfo **/ struct tcpcb*, struct tcp_ifcap *);
 int	 tcp_addoptions(struct tcpopt *, u_char *);
 int	 tcp_mssopt(/*struct in_conninfo **/ struct tcpcb*);
+int	 tcp_reass(struct tcpcb *, struct tcphdr *, int *, /*struct mbuf*/uint8_t *, uint8_t*);
 
-#define	tcps_rcvmemdrop	tcps_rcvreassfull	/* compat */
+#define	tcps_rcvmemdrop	tcps_rcvreassfull	/* compat */0
 
 #ifdef _KERNEL
 #include <sys/counter.h>

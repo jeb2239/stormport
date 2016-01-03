@@ -36,6 +36,7 @@
 #include "tcp_var.h"
 #include "tcp_seq.h"
 #include "tcp_timer.h"
+#include "bitmap.h"
 #include "cbuf.h"
 #include "cc.h"
 
@@ -217,6 +218,8 @@ void initialize_tcb(struct tcpcb* tp, uint16_t lport, int index) {
 	uint32_t ticks = get_ticks();
 	
     memset(tp, 0x00, sizeof(struct tcpcb));
+    bmp_init(tp->reassbmp, REASSBMP_SIZE);
+    tp->reass_fin_index = -1;
     tp->lport = lport;
     tp->index = index;
     // Congestion control algorithm. For now, don't include it.

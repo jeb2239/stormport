@@ -17,9 +17,16 @@ size_t cbuf_used_space(uint8_t* buf);
 size_t cbuf_free_space(uint8_t* buf);
 size_t cbuf_size(uint8_t* buf);
 
+size_t cbuf_reass_write(uint8_t* buf, size_t offset, uint8_t* data, size_t numbytes, uint8_t* bitmap, size_t* firstindex);
+size_t cbuf_reass_merge(uint8_t* buf, size_t numbytes, uint8_t* bitmap);
+size_t cbuf_reass_count_set(uint8_t* buf, size_t offset, uint8_t* bitmap, size_t limit);
+int cbuf_reass_within_offset(uint8_t* buf, size_t offset, size_t index);
+
+/*
 int cbuf_write_segment(uint8_t* buf, uint8_t* segment, size_t seglen);
 size_t cbuf_pop_segment(uint8_t* buf, size_t segsize);
 size_t cbuf_peek_segment_size(uint8_t* buf);
 size_t cbuf_peek_segment(uint8_t* buf, uint8_t* data, size_t numbytes);
+*/
 
 #endif

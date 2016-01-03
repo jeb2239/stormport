@@ -46,7 +46,9 @@ module BsdTcpP {
 #include <bsdtcp/tcp_timer.c>
 #include <bsdtcp/tcp_timewait.c>
 #include <bsdtcp/tcp_usrreq.c>
+#include <bsdtcp/tcp_reass.c>
 #include <bsdtcp/checksum.c>
+#include <bsdtcp/bitmap.c>
 #include <bsdtcp/cbuf.c>
 #include <bsdtcp/cc/cc_newreno.c>
 

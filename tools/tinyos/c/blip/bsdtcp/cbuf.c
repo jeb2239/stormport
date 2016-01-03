@@ -1,4 +1,5 @@
 /* CIRCULAR BUFFER */
+#include "bitmap.h"
 
 struct circbuf_header {
     size_t r_index;
@@ -111,6 +112,108 @@ size_t cbuf_read_offset(uint8_t* buf, uint8_t* data, size_t numbytes, size_t off
     return numbytes;    
 }
 
+size_t cbuf_pop(uint8_t* buf, size_t numbytes) {
+    struct circbuf_header* chdr = (struct circbuf_header*) buf;
+    size_t used_space = _cbuf_used_space(chdr);
+    if (used_space < numbytes) {
+        numbytes = used_space;
+    }
+    chdr->r_index = (chdr->r_index + numbytes) % chdr->size;
+    return numbytes;
+}
+
+/* Writes DATA to the unused portion of the buffer, at the position OFFSET past
+   the end of the buffer. BITMAP is updated by setting bits according to which
+   bytes now contain data.
+   The index of the first byte written is stored into FIRSTINDEX, if it is not
+   NULL. */
+size_t cbuf_reass_write(uint8_t* buf, size_t offset, uint8_t* data, size_t numbytes, uint8_t* bitmap, size_t* firstindex) {
+    struct circbuf_header* chdr = (struct circbuf_header*) buf;
+    uint8_t* buf_data = (uint8_t*) (chdr + 1);
+    size_t free_space = _cbuf_free_space(chdr);
+    size_t start_index;
+    size_t end_index;
+    size_t bytes_to_end;
+    if (offset > free_space) {
+        return 0;
+    } else if (offset + numbytes > free_space) {
+        numbytes = free_space - offset;
+    }
+    start_index = (chdr->w_index + offset) % chdr->size;
+    end_index = (start_index + numbytes) % chdr->size;
+    if (end_index >= start_index) {
+        memcpy(buf_data + start_index, data, numbytes);
+        if (bitmap) {
+            bmp_setrange(bitmap, start_index, numbytes);
+        }
+    } else {
+        bytes_to_end = chdr->size - start_index;
+        memcpy(buf_data + start_index, data, bytes_to_end);
+        memcpy(buf_data, data + bytes_to_end, numbytes - bytes_to_end);
+        if (bitmap) {
+            bmp_setrange(bitmap, start_index, bytes_to_end);
+            bmp_setrange(bitmap, 0, numbytes - bytes_to_end);
+        }
+    }
+    if (firstindex) {
+        *firstindex = start_index;
+    }
+    return numbytes;
+}
+
+/* Writes NUMBYTES bytes to the buffer. The bytes are taken from the unused
+   space of the buffer, and can be set using cbuf_reass_write. */
+size_t cbuf_reass_merge(uint8_t* buf, size_t numbytes, uint8_t* bitmap) {
+    struct circbuf_header* chdr = (struct circbuf_header*) buf;
+    size_t old_w = chdr->w_index;
+    size_t free_space = _cbuf_free_space(chdr);
+    size_t bytes_to_end;
+    if (numbytes > free_space) {
+        numbytes = free_space;
+    }
+    chdr->w_index = (chdr->w_index + numbytes) % chdr->size;
+    if (bitmap) {
+        if (chdr->w_index >= old_w) {
+            bmp_clrrange(bitmap, old_w, numbytes);
+        } else {
+            bytes_to_end = chdr->size - old_w;
+            bmp_clrrange(bitmap, old_w, bytes_to_end);
+            bmp_clrrange(bitmap, 0, numbytes - bytes_to_end);
+        }
+    }
+    return numbytes;
+}
+
+size_t cbuf_reass_count_set(uint8_t* buf, size_t offset, uint8_t* bitmap, size_t limit) {
+    struct circbuf_header* chdr = (struct circbuf_header*) buf;
+    size_t bitmap_size = (chdr->size >> 3) + ((chdr->size & 0x7) ? 1 : 0);
+    size_t until_end;
+    offset = (chdr->w_index + offset) % chdr->size;
+    until_end = bmp_countset(bitmap, bitmap_size, offset, limit);
+    if (until_end >= limit || until_end < (chdr->size - offset)) {
+        // If we already hit the limit, or if the streak ended before wrapping, then stop here
+        return until_end;
+    }
+    limit -= until_end; // effectively, this is our limit when continuing
+    // Continue until either the new limit or until we have scanned OFFSET bits (if we scan more than OFFSET bits, we'll wrap and scan some parts twice)
+    return until_end + bmp_countset(bitmap, bitmap_size, 0, limit < offset ? limit : offset);
+}
+
+/* Returns a true value iff INDEX is the index of a byte within OFFSET bytes
+   past the end of the buffer. */
+int cbuf_reass_within_offset(uint8_t* buf, size_t offset, size_t index) {
+    struct circbuf_header* chdr = (struct circbuf_header*) buf;
+    size_t range_start = chdr->w_index;
+    size_t range_end = (range_start + offset) % chdr->size;
+    if (range_end >= range_start) {
+        return index >= range_start && index < range_end;
+    } else {
+        return index < range_end || (index >= range_start && index < chdr->size);
+    }
+}
+
+#if 0 // The segment functionality doesn't look like it's going to be used
+
 /* Reads NBYTES bytes of the first segment into BUF. If there aren't NBYTES
    to read in the buffer, does nothing and returns 0. Otherwise, returns
    the number of bytes read. */
@@ -128,15 +231,6 @@ size_t cbuf_peek_segment(uint8_t* buf, uint8_t* data, size_t numbytes) {
     return numbytes;
 }
 
-size_t cbuf_pop(uint8_t* buf, size_t numbytes) {
-    struct circbuf_header* chdr = (struct circbuf_header*) buf;
-    size_t used_space = _cbuf_used_space(chdr);
-    if (used_space < numbytes) {
-        numbytes = used_space;
-    }
-    chdr->r_index = (chdr->r_index + numbytes) % chdr->size;
-    return numbytes;
-}
 
 int cbuf_write_segment(uint8_t* buf, uint8_t* segment, size_t seglen) {
     struct circbuf_header* chdr = (struct circbuf_header*) buf;
@@ -163,3 +257,5 @@ size_t cbuf_pop_segment(uint8_t* buf, size_t segsize) {
     }
     return cbuf_pop(buf, segsize + sizeof(size_t));
 }
+
+#endif
