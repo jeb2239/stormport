@@ -553,6 +553,9 @@ tcp_usr_shutdown(struct tcpcb* tp)
 		error = ECONNRESET;
 		goto out;
 	}
+	if (tp->t_state == TCPS_CLOSED) { // Added by Sam: omit the tcp_output() call in this case
+		goto out;
+	}
 #if 0
 	tp = intotcpcb(inp);
 	TCPDEBUG1();
