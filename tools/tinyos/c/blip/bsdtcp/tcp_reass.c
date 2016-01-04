@@ -56,8 +56,10 @@ tcp_reass(struct tcpcb* tp, struct tcphdr* th, int* tlenp, uint8_t* data, uint8_
 	size_t offset;
 	size_t start_index;
 	int added_fin;
+	size_t usedbefore;
 	int tlen = *tlenp;
 	size_t merged = 0;
+	int flags = 0;
 	
 	/*
 	 * Call with th==NULL after become established to
@@ -87,29 +89,30 @@ present:
 	 * completed sequence space.
 	 */
 	mergeable = cbuf_reass_count_set(tp->recvbuf, 0, tp->reassbmp, (size_t) 0xFFFFFFFF);
-	if (!(tp->bufstate & TCB_CANTRCVMORE)) {
-		size_t usedbefore = cbuf_used_space(tp->recvbuf);
+	usedbefore = cbuf_used_space(tp->recvbuf);
+	if (!(tp->bufstate & TCB_CANTRCVMORE) || usedbefore == 0) {
+		/* If usedbefore == 0, but we can't receive more, then we still need to move the buffer
+		   along by merging and then popping, in case we receive a FIN later on. */
+		if (tp->reass_fin_index >= 0 && cbuf_reass_within_offset(tp->recvbuf, mergeable, (size_t) tp->reass_fin_index)) {
+			tp->reass_fin_index = -2; // So we won't consider any more FINs
+			flags = TH_FIN;
+		}
 		merged = cbuf_reass_merge(tp->recvbuf, mergeable, tp->reassbmp);
-		if (usedbefore == 0 && merged > 0) {
+		KASSERT(merged == mergeable, ("Reassembly merge out of bounds: tried to merge %d, but merged %d\n", (int) mergeable, (int) merged));
+		if (tp->bufstate & TCB_CANTRCVMORE) {
+			cbuf_pop(tp->recvbuf, merged); // So no data really enters the buffer
+		} else if (usedbefore == 0 && merged > 0) {
 			*signals |= SIG_RECVBUF_NOTEMPTY;
 		}
-		KASSERT(merged == mergeable, ("Reassembly merge out of bounds: tried to merge %d, but merged %d\n", (int) mergeable, (int) merged));
 	} else {
-		/* Sam: This corrupts the bitmap state, since now the write pointer in the buffer is out of
-		   sync with tp->rcv_nxt, which means that future calls to this function may misinterpret
-		   the bitmap and think that we have bytes that we actually don't and vice versa.
-		   That's perfectly OK since we won't ever write anything more to the receive buffer anyway,
-		   so the user won't see any corrupt data. */
+		/* If there is data in the buffer AND we can't receive more, then that must be because we received a FIN,
+		   but the user hasn't yet emptied the buffer of its contents. */
+		KASSERT (tp->reass_fin_index == -2, ("Can't receive more, and data in buffer, but haven't received a FIN\n"));
 	}
 	
 	tp->rcv_nxt += mergeable;
 	
-	if (tp->reass_fin_index >= 0 && cbuf_reass_within_offset(tp->recvbuf, mergeable, (size_t) tp->reass_fin_index)) {
-		tp->reass_fin_index = -2; // So we won't consider any more FINs
-		return TH_FIN;
-	} else {
-		return 0;
-	}
+	return flags;
 }
 #if 0
 int

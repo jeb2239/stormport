@@ -263,6 +263,7 @@ module BsdTcpP {
     command error_t BSDTCPActiveSocket.shutdown[uint8_t asockid](bool shut_rd, bool shut_wr) {
         int error = SUCCESS;
         if (shut_rd) {
+            cbuf_pop(tcbs[asockid].recvbuf, cbuf_used_space(tcbs[asockid].recvbuf)); // remove all data from the cbuf
             tpcantrcvmore(&tcbs[asockid]);
         }
         if (shut_wr) {

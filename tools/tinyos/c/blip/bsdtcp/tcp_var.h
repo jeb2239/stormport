@@ -123,8 +123,8 @@ struct tcpcb {
 	bool passiveopen; // Remembers if this TCB was initialized via a passive open or active open
 	
 	uint8_t bufstate;
-	uint8_t sendbuf[SENDBUF_SIZE];
 	uint8_t recvbuf[RECVBUF_SIZE];
+	uint8_t sendbuf[SENDBUF_SIZE];
 	uint8_t reassbmp[REASSBMP_SIZE];
 	int16_t reass_fin_index;
 	
