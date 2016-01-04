@@ -403,7 +403,7 @@ tcp_close(struct tcpcb *tp)
 	// Seriously, it looks like this is all this function does, that I'm concerned with
 	tcp_state_change(tp, TCP6S_CLOSED); // for the print statement
 	tcp_discardcb(tp);
-	initialize_tcb(tp, tp->lport, tp->index);
+	// Don't reset the TCB by calling initialize_tcb, since that overwrites the buffer contents.
 	return tp;
 #if 0
 	struct inpcb *inp = tp->t_inpcb;

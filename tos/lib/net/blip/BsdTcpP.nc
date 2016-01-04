@@ -235,17 +235,22 @@ module BsdTcpP {
     }
     
     command error_t BSDTCPPassiveSocket.listenaccept[uint8_t psockid](int asockid) {
-        tcbls[psockid].t_state = TCP6S_LISTEN;
-        if (tcbs[asockid].t_state != TCP6S_CLOSED) {
-            printf("Cannot accept connection into active socket that isn't closed\n");
-            return -1;
+        tcbls[psockid].t_state = TCPS_LISTEN;
+        if (tcbs[asockid].t_state != TCPS_CLOSED) {
+        	tcbls[psockid].t_state = TCPS_CLOSED;
+        	return EISCONN;
         }
+        initialize_tcb(&tcbs[asockid], tcbs[asockid].lport, tcbs[asockid].index);
         tcbls[psockid].acceptinto = &tcbs[asockid];
         return SUCCESS;
     }
     
     command error_t BSDTCPActiveSocket.connect[uint8_t asockid](struct sockaddr_in6* addr) {
         struct tcpcb* tp = &tcbs[asockid];
+        if (tp->t_state != TCPS_CLOSED) { // This is a check that I added
+            return (EISCONN);
+        }
+        initialize_tcb(tp, tp->lport, tp->index);
         return tcp6_usr_connect(tp, addr);
     }
     
