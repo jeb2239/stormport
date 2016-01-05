@@ -58,6 +58,8 @@ const int V_tcp_v6mssdflt = FRAGLIMIT_6LOWPAN - sizeof(struct ip6_hdr) - sizeof(
 /* Normally, this is used to prevent DoS attacks by sending tiny MSS values in the options. */
 const int V_tcp_minmss = 70; // Barely enough for TCP header and all options. Default is 216.
 
+extern const int V_tcp_do_sack;
+
 // A simple linear congruential number generator
 tcp_seq seed = (tcp_seq) 0xbeaddeed; 
 tcp_seq tcp_new_isn(struct tcpcb* tp) {
@@ -67,6 +69,8 @@ tcp_seq tcp_new_isn(struct tcpcb* tp) {
  
 /* This is based on tcp_init in tcp_subr.c. */
 void tcp_init(void) {
+	// Added by Sam: Need to initialize the sackhole pool.
+	tcp_sack_init();
 #if 0 // I'M NOT USING A HASH TABLE TO STORE TCBS.
 	const char *tcbhash_tuneable;
 	int hashsize;
@@ -236,10 +240,9 @@ void initialize_tcb(struct tcpcb* tp, uint16_t lport, int index) {
     
     if (V_tcp_do_rfc1323)
 		tp->t_flags = (TF_REQ_SCALE|TF_REQ_TSTMP);
-#if 0 // NO SACK
 	if (V_tcp_do_sack)
 		tp->t_flags |= TF_SACK_PERMIT;
-#endif
+	TAILQ_INIT(&tp->snd_holes);
     
     /*
 	 * Init srtt to TCPTV_SRTTBASE (0), so we can tell that we have no
@@ -276,6 +279,8 @@ tcp_discardcb(struct tcpcb *tp)
 //	khelp_destroy_osd(tp->osd);
 
 	CC_ALGO(tp) = NULL;
+	
+	tcp_free_sackholes(tp);
 #if 0 // Most of this is not applicable anymore. Above, I've copied the relevant parts.
 	struct inpcb *inp = tp->t_inpcb;
 	struct socket *so = inp->inp_socket;

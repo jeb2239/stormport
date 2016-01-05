@@ -186,7 +186,7 @@ size_t cbuf_reass_merge(uint8_t* buf, size_t numbytes, uint8_t* bitmap) {
 
 size_t cbuf_reass_count_set(uint8_t* buf, size_t offset, uint8_t* bitmap, size_t limit) {
     struct circbuf_header* chdr = (struct circbuf_header*) buf;
-    size_t bitmap_size = (chdr->size >> 3) + ((chdr->size & 0x7) ? 1 : 0);
+    size_t bitmap_size = BITS_TO_BYTES(chdr->size);
     size_t until_end;
     offset = (chdr->w_index + offset) % chdr->size;
     until_end = bmp_countset(bitmap, bitmap_size, offset, limit);

@@ -1,7 +1,7 @@
 /* BITMAP */
 
-void bmp_init(uint8_t* buf, size_t len) {
-    memset(buf, 0x00, len);
+void bmp_init(uint8_t* buf, size_t numbytes) {
+    memset(buf, 0x00, numbytes);
 }
 
 #define _bmp_getrangeinfo(buf, start, len, first_bit_id, first_byte_ptr, last_bit_id, last_byte_ptr) \

@@ -77,6 +77,7 @@
 #include "icmp_var.h"
 #include "ip.h"
 #include "ip6.h"
+#include "sys/queue.h"
 
 const int tcprexmtthresh = 3;
 const int V_drop_synfin = 0;
@@ -89,7 +90,7 @@ const int V_drop_synfin = 0;
 int V_tcp_do_ecn = 0;
 int V_tcp_do_rfc3042 = 0;
 int tcp_fast_finwait2_recycle = 0;
-const int V_tcp_do_sack = 0;
+const int V_tcp_do_sack = 1;
 const int V_path_mtu_discovery = 0;
 const int V_tcp_delack_enabled = 1;
 const int V_tcp_initcwnd_segments = 0;
@@ -1439,10 +1440,8 @@ relocked:
 				tp->t_flags |= TF_SIGNATURE;
 	#endif
 #endif
-#if 0 // Don't permit SACK
 			if (/*sc->sc_flags & SCF_SACK*/ to.to_flags & TOF_SACKPERM)
 				tp->t_flags |= TF_SACK_PERMIT;
-#endif
 		}
 		if (/*sc->sc_flags & SCF_ECN*/(th->th_flags & (TH_ECE|TH_CWR)) && V_tcp_do_ecn)
 			tp->t_flags |= TF_ECN_PERMIT;
@@ -1600,7 +1599,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 #endif
 	thflags = th->th_flags;
 	//inc = &tp->t_inpcb->inp_inc;
-	//tp->sackhint.last_sack_ack = 0;
+	tp->sackhint.last_sack_ack = 0;
 
 	/*
 	 * If this is either a state-changing packet or current state isn't
@@ -1792,9 +1791,9 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		if (tlen == 0) {
 			if (SEQ_GT(th->th_ack, tp->snd_una) &&
 			    SEQ_LEQ(th->th_ack, tp->snd_max) &&
-			    !IN_RECOVERY(tp->t_flags)/* &&
+			    !IN_RECOVERY(tp->t_flags) &&
 			    (to.to_flags & TOF_SACK) == 0 &&
-			    TAILQ_EMPTY(&tp->snd_holes)*/) {
+			    TAILQ_EMPTY(&tp->snd_holes)) {
 				/*
 				 * This is a pure ack for outstanding data.
 				 */
@@ -1917,12 +1916,12 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			if (ti_locked == TI_RLOCKED)
 				INP_INFO_RUNLOCK(&V_tcbinfo);
 			ti_locked = TI_UNLOCKED;
-
+#endif
 			/* Clean receiver SACK report if present */
 			if ((tp->t_flags & TF_SACK_PERMIT) && tp->rcv_numsacks)
 				tcp_clean_sackreport(tp);
-			TCPSTAT_INC(tcps_preddat);
-#endif
+//			TCPSTAT_INC(tcps_preddat);
+			
 			tp->rcv_nxt += tlen;
 			/*
 			 * Pull snd_wl1 up to prevent seq wrap relative to
@@ -2582,12 +2581,12 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 //			TCPSTAT_INC(tcps_rcvacktoomuch);
 			goto dropafterack;
 		}
-#if 0
+		
 		if ((tp->t_flags & TF_SACK_PERMIT) &&
 		    ((to.to_flags & TOF_SACK) ||
 		     !TAILQ_EMPTY(&tp->snd_holes)))
 			tcp_sack_doack(tp, &to, th->th_ack);
-#endif
+
 		/* Run HHOOK_TCP_ESTABLISHED_IN helper hooks. */
 //		hhook_run_tcp_est_in(tp, th, &to);
 
@@ -2640,7 +2639,6 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				else if (++tp->t_dupacks > tcprexmtthresh ||
 				     IN_FASTRECOVERY(tp->t_flags)) {
 					cc_ack_received(tp, th, CC_DUPACK);
-#if 0
 					if ((tp->t_flags & TF_SACK_PERMIT) &&
 					    IN_FASTRECOVERY(tp->t_flags)) {
 						int awnd;
@@ -2659,7 +2657,6 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 								tp->snd_cwnd = tp->snd_ssthresh;
 						}
 					} else
-#endif
 						tp->snd_cwnd += tp->t_maxseg;
 					(void) tcp_output(tp);
 					goto drop;
@@ -2690,7 +2687,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 					cc_ack_received(tp, th, CC_DUPACK);
 					tcp_timer_activate(tp, TT_REXMT, 0);
 					tp->t_rtttime = 0;
-#if 0
+					
 					if (tp->t_flags & TF_SACK_PERMIT) {
 //						TCPSTAT_INC(
 //						    tcps_sack_recovery_episode);
@@ -2699,7 +2696,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 						(void) tcp_output(tp);
 						goto drop;
 					}
-#endif
+
 					tp->snd_nxt = th->th_ack;
 					tp->snd_cwnd = tp->t_maxseg;
 					(void) tcp_output(tp);
@@ -2781,9 +2778,9 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 		 */
 		if (IN_FASTRECOVERY(tp->t_flags)) {
 			if (SEQ_LT(th->th_ack, tp->snd_recover)) {
-//				if (tp->t_flags & TF_SACK_PERMIT)
-//					tcp_sack_partialack(tp, th);
-//				else
+				if (tp->t_flags & TF_SACK_PERMIT)
+					tcp_sack_partialack(tp, th);
+				else
 					tcp_newreno_partial_ack(tp, th);
 			} else
 				cc_post_recovery(tp, th);
@@ -3153,8 +3150,8 @@ dodata:							/* XXX */
 			tp->t_flags |= TF_ACKNOW;
 		}
 		// Only place tlen is used after the call to tcp_reass is below
-//		if (tlen > 0 && (tp->t_flags & TF_SACK_PERMIT))
-//			tcp_update_sack_list(tp, save_start, save_start + tlen);
+		if (tlen > 0 && (tp->t_flags & TF_SACK_PERMIT))
+			tcp_update_sack_list(tp, save_start, save_start + tlen);
 #if 0 // This was originally there, not me commenting out things
 		/*
 		 * Note the amount of data that peer has sent into
@@ -3417,7 +3414,6 @@ tcp_dooptions(struct tcpopt *to, u_char *cp, int cnt, int flags)
 				continue;
 			if (!V_tcp_do_sack)
 				continue;
-			printf("WARNING: Processing SACK permitted message\n");
 			to->to_flags |= TOF_SACKPERM;
 			break;
 		case TCPOPT_SACK:
@@ -3425,10 +3421,9 @@ tcp_dooptions(struct tcpopt *to, u_char *cp, int cnt, int flags)
 				continue;
 			if (flags & TO_SYN)
 				continue;
-			printf("WARNING: Processing SACK\n");
-//			to->to_flags |= TOF_SACK;
-//			to->to_nsacks = (optlen - 2) / TCPOLEN_SACK;
-//			to->to_sacks = cp + 2;
+			to->to_flags |= TOF_SACK;
+			to->to_nsacks = (optlen - 2) / TCPOLEN_SACK;
+			to->to_sacks = cp + 2;
 //			TCPSTAT_INC(tcps_sack_rcv_blocks);
 			break;
 		default:

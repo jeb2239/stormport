@@ -66,6 +66,8 @@ unsigned long ulmin(unsigned long a, unsigned long b) {
 	}
 }
 
+#define lmin(a, b) min(a, b)
+
 void
 tcp_setpersist(struct tcpcb *tp)
 {
@@ -129,6 +131,7 @@ tcp_output(struct tcpcb *tp)
 	int off, flags, error = 0;	/* Keep compiler happy */
 	int sendalot, mtu;
 	int sack_rxmit, sack_bytes_rxmt;
+	struct sackhole* p;
 	unsigned ipoptlen, optlen, hdrlen;
 	int alen;
 	char* buf, * bufreal;
@@ -161,7 +164,6 @@ tcp_output(struct tcpcb *tp)
 		}
 	}
 again:
-#if 0 // OMIT ALL SACK HANDLING
 	/*
 	 * If we've recently taken a timeout, snd_max will be greater than
 	 * snd_nxt.  There may be SACK information that allows us to avoid
@@ -170,7 +172,6 @@ again:
 	if ((tp->t_flags & TF_SACK_PERMIT) &&
 	    SEQ_LT(tp->snd_nxt, tp->snd_max))
 		tcp_sack_adjust(tp);
-#endif
 	sendalot = 0;
 #if 0
 	tso = 0;
@@ -193,7 +194,6 @@ again:
 	sack_rxmit = 0;
 	sack_bytes_rxmt = 0;
 	len = 0;
-#if 0 // OMIT ALL SACK HANDLING
 	p = NULL;
 	if ((tp->t_flags & TF_SACK_PERMIT) && IN_FASTRECOVERY(tp->t_flags) &&
 	    (p = tcp_sack_output(tp, &sack_bytes_rxmt))) {
@@ -230,12 +230,11 @@ again:
 		if (len > 0) {
 			sack_rxmit = 1;
 			sendalot = 1;
-			TCPSTAT_INC(tcps_sack_rexmits);
-			TCPSTAT_ADD(tcps_sack_rexmit_bytes,
-			    min(len, tp->t_maxseg));
+//			TCPSTAT_INC(tcps_sack_rexmits);
+//			TCPSTAT_ADD(tcps_sack_rexmit_bytes,
+//			    min(len, tp->t_maxseg));
 		}
 	}
-#endif
 after_sack_rexmit:
 	/*
 	 * Get standard flags, and add SYN or FIN if requested by 'hidden'
@@ -303,7 +302,6 @@ after_sack_rexmit:
 //			len = ((long)ulmin(sbavail(&so->so_snd), sendwin) -
 			len = ((long) ulmin(cbuf_used_space(tp->sendbuf), sendwin) -
 			    off);
-#if 0
 		else {
 			long cwin;
 
@@ -312,7 +310,7 @@ after_sack_rexmit:
 			 * sending new data, having retransmitted all the
 			 * data possible in the scoreboard.
 			 */
-			len = ((long)ulmin(sbavail(&so->so_snd), tp->snd_wnd) -
+			len = ((long)ulmin(/*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf), tp->snd_wnd) -
 			    off);
 			/*
 			 * Don't remove this (len > 0) check !
@@ -331,7 +329,6 @@ after_sack_rexmit:
 				len = lmin(len, cwin);
 			}
 		}
-#endif
 	}
 
 	/*
@@ -469,18 +466,17 @@ after_sack_rexmit:
 	    tp->t_inpcb->in6p_options == NULL)
 		tso = 1;
 #endif
-#if 0 // NO SACK
+
 	if (sack_rxmit) {
 //		if (SEQ_LT(p->rxmit + len, tp->snd_una + sbused(&so->so_snd)))
 		if (SEQ_LT(p->rxmit + len, tp->snd_una + cbuf_used_space(tp->sendbuf)))
 			flags &= ~TH_FIN;
-#endif
-//	} else {
+	} else {
 		if (SEQ_LT(tp->snd_nxt + len, tp->snd_una +
 //		    sbused(&so->so_snd)))
 			cbuf_used_space(tp->sendbuf)))
 			flags &= ~TH_FIN;
-//	}
+	}
 
 //	recwin = sbspace(&so->so_rcv);
 	recwin = cbuf_free_space(tp->recvbuf);
@@ -614,7 +610,6 @@ dontupdate:
 	 * after the retransmission timer has been turned off.  Make sure
 	 * that the retransmission timer is set.
 	 */
-#if 0
 	if ((tp->t_flags & TF_SACK_PERMIT) &&
 	    SEQ_GT(tp->snd_max, tp->snd_una) &&
 	    !tcp_timer_active(tp, TT_REXMT) &&
@@ -622,7 +617,7 @@ dontupdate:
 		tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
 		goto just_return;
 	} 
-#endif
+
 	/*
 	 * TCP window updates are not reliable, rather a polling protocol
 	 * using ``persist'' packets is used to insure receipt of window
@@ -719,7 +714,7 @@ send:
 				tp->rfbuf_ts = tcp_ts_getticks();
 #endif
 		}
-#if 0 // Don't allow Selective ACKs
+		
 		/* Selective ACK's. */
 		if (tp->t_flags & TF_SACK_PERMIT) {
 			if (flags & TH_SYN)
@@ -732,7 +727,7 @@ send:
 				to.to_sacks = (u_char *)tp->sackblks;
 			}
 		}
-#endif
+
 #if 0
 #ifdef TCP_SIGNATURE
 		/* TCP-MD5 (RFC2385). */
@@ -1026,6 +1021,7 @@ send:
 	bufreal = ip_malloc(alen + 3);
 	if (bufreal == NULL) {
 		error = ENOBUFS;
+		sack_rxmit = 0;
 		goto out;
 	}
 	buf = (char*) (((uint32_t) (bufreal + 3)) & 0xFFFFFFFCu);
@@ -1135,19 +1131,18 @@ send:
 	 * case, since we know we aren't doing a retransmission.
 	 * (retransmit and persist are mutually exclusive...)
 	 */
-	//if (sack_rxmit == 0) {
+	if (sack_rxmit == 0) {
 		if (len || (flags & (TH_SYN|TH_FIN)) ||
 		    tcp_timer_active(tp, TT_PERSIST))
 			th->th_seq = htonl(tp->snd_nxt);
 		else
 			th->th_seq = htonl(tp->snd_max);
-#if 0
 	} else {
 		th->th_seq = htonl(p->rxmit);
 		p->rxmit += len;
 		tp->sackhint.sack_bytes_rexmit += len;
 	}
-#endif
+
 	th->th_ack = htonl(tp->rcv_nxt);
 	if (optlen) {
 		bcopy(opt, th + 1, optlen);
@@ -1521,14 +1516,12 @@ timer:
 		    !tcp_timer_active(tp, TT_PERSIST)) &&
 		    ((flags & TH_SYN) == 0) &&
 		    (error != EPERM)) {
-#if 0 // NO SACK
 			if (sack_rxmit) {
 				p->rxmit -= len;
 				tp->sackhint.sack_bytes_rexmit -= len;
 				KASSERT(tp->sackhint.sack_bytes_rexmit >= 0,
 				    ("sackhint bytes rtx >= 0"));
 			} else
-#endif
 				tp->snd_nxt -= len;
 		}
 		//SOCKBUF_UNLOCK_ASSERT(&so->so_snd);	/* Check gotos. */
@@ -1705,8 +1698,6 @@ tcp_addoptions(struct tcpopt *to, u_char *optp)
 			}
 		case TOF_SACK:
 			{
-			printf("WARNING: Adding SACK option\n");
-#if 0
 			int sackblks = 0;
 			struct sackblk *sack = (struct sackblk *)to->to_sacks;
 			tcp_seq sack_seq;
@@ -1732,7 +1723,6 @@ tcp_addoptions(struct tcpopt *to, u_char *optp)
 				optlen += TCPOLEN_SACK;
 				sack++;
 			}
-#endif
 //			TCPSTAT_INC(tcps_sack_send_blocks);
 			break;
 			}

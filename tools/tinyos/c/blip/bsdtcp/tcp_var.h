@@ -34,9 +34,12 @@
 #define _NETINET_TCP_VAR_H_
 
 //#include <netinet/tcp.h>
+#include "bitmap.h"
 #include "cc.h"
 #include "tcp.h"
 #include "types.h"
+
+#include "sys/queue.h"
 
 #if 0 //#ifdef _KERNEL
 #include <net/vnet.h>
@@ -50,7 +53,7 @@ VNET_DECLARE(int, tcp_do_rfc1323);
 
 #endif /* _KERNEL */
 
-#if 0 // I have a segment queue, but not impplemented like this
+#if 0 // I have a segment queue, but it is not implemented like this
 /* TCP segment queue entry */
 struct tseg_qent {
 	LIST_ENTRY(tseg_qent) tqe_q;
@@ -61,7 +64,6 @@ struct tseg_qent {
 LIST_HEAD(tsegqe_head, tseg_qent);
 #endif
 
-#if 0
 struct sackblk {
 	tcp_seq start;		/* start seq no. of sack block */
 	tcp_seq end;		/* end seq no. */
@@ -79,10 +81,9 @@ struct sackhint {
 	int		sack_bytes_rexmit;
 	tcp_seq		last_sack_ack;	/* Most recent/largest sacked ack */
 
-	int		ispare;		/* explicit pad for 64bit alignment */
-	uint64_t	_pad[2];	/* 1 sacked_bytes, 1 TBD */
+//	int		ispare;		/* explicit pad for 64bit alignment */
+//	uint64_t	_pad[2];	/* 1 sacked_bytes, 1 TBD */
 };
-#endif
 
 struct tcptemp {
 	u_char	tt_ipgen[40]; /* the size must be of max ip header, now IPv6 */
@@ -106,9 +107,17 @@ struct tcpcb_listen {
 #define tpcantsendmore(tp) (tp)->bufstate |= TCB_CANTSENDMORE
 
 #define CBUF_OVERHEAD 12
-#define SENDBUF_SIZE 123
-#define RECVBUF_SIZE 130
-#define REASSBMP_SIZE (((RECVBUF_SIZE - CBUF_OVERHEAD) >> 3) + (((RECVBUF_SIZE - CBUF_OVERHEAD) & 0x7) ? 1 : 0))
+#define SENDBUF_SIZE 185
+#define RECVBUF_SIZE 185
+#define REASSBMP_SIZE BITS_TO_BYTES(RECVBUF_SIZE - CBUF_OVERHEAD)
+
+/* These estimates are used to allocate sackholes (see tcp_sack.c). */
+#define AVG_SACKHOLES 4 // per TCB
+#define MAX_SACKHOLES 6 // per TCB
+#define SACKHOLE_POOL_SIZE AVG_SACKHOLES * NUMBSDTCPACTIVESOCKETS
+#define SACKHOLE_BMP_SIZE BITS_TO_BYTES(SACKHOLE_POOL_SIZE)
+
+// You can set the maximum number of SACK blocks in tcp.h
 
 /*
  * Tcp control block, one per tcp; fields:
@@ -133,7 +142,7 @@ struct tcpcb {
 	
 	struct in6_addr faddr; // foreign IP address
 	
-#if 0
+#if 0 // I used unused space in the receive buffer for the reassembly queue
 	struct	tsegqe_head t_segq;	/* segment reassembly queue */
 	void	*t_pspare[2];		/* new reassembly queue */
 	int	t_segqlen;		/* segment reassembly queue length */
@@ -220,7 +229,7 @@ struct tcpcb {
 	int	t_sndzerowin;		/* zero-window updates sent */
 	u_int	t_badrxtwin;		/* window for retransmit recovery */
 	u_char	snd_limited;		/* segments limited transmitted */
-#if 0
+
 /* SACK related state */
 	int	snd_numholes;		/* number of holes seen by sender */
 	TAILQ_HEAD(sackhole_head, sackhole) snd_holes;
@@ -231,14 +240,14 @@ struct tcpcb {
 	tcp_seq sack_newdata;		/* New data xmitted in this recovery
 					   episode starts at this seq number */
 	struct sackhint	sackhint;	/* SACK scoreboard hint */
-#endif
-	int	t_rttlow;		/* smallest observerved RTT */
+
+	int	t_rttlow;		/* smallest observed RTT */
 #if 0
 	u_int32_t	rfbuf_ts;	/* recv buffer autoscaling timestamp */
 	int	rfbuf_cnt;		/* recv buffer autoscaling byte count */
 	struct toedev	*tod;		/* toedev handling this connection */
 #endif
-	int	t_sndrexmitpack;	/* retransmit packets sent */
+//	int	t_sndrexmitpack;	/* retransmit packets sent */
 //	int	t_rcvoopack;		/* out-of-order packets received */
 //	void	*t_toe;			/* TOE pcb pointer */
 	int	t_bytes_acked;		/* # bytes acked during current RTT */
@@ -623,6 +632,14 @@ u_long	 tcp_maxmtu6(/*struct in_conninfo **/ struct tcpcb*, struct tcp_ifcap *);
 int	 tcp_addoptions(struct tcpopt *, u_char *);
 int	 tcp_mssopt(/*struct in_conninfo **/ struct tcpcb*);
 int	 tcp_reass(struct tcpcb *, struct tcphdr *, int *, /*struct mbuf*/uint8_t *, uint8_t*);
+void tcp_sack_init(); // Sam: new function that I added
+void	 tcp_sack_doack(struct tcpcb *, struct tcpopt *, tcp_seq);
+void	 tcp_update_sack_list(struct tcpcb *tp, tcp_seq rcv_laststart, tcp_seq rcv_lastend);
+void	 tcp_clean_sackreport(struct tcpcb *tp);
+void	 tcp_sack_adjust(struct tcpcb *tp);
+struct sackhole *tcp_sack_output(struct tcpcb *tp, int *sack_bytes_rexmt);
+void	 tcp_sack_partialack(struct tcpcb *, struct tcphdr *);
+void	 tcp_free_sackholes(struct tcpcb *tp);
 
 #define	tcps_rcvmemdrop	tcps_rcvreassfull	/* compat */0
 
