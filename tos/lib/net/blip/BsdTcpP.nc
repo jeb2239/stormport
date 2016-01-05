@@ -24,6 +24,7 @@ module BsdTcpP {
 } implementation {
 #include <bsdtcp/cbuf.h>
 #include <bsdtcp/tcp_var.h>
+#include <bsdtcp/sys/errno.h>
 
 	#define SIG_CONN_ESTABLISHED 0x01
     #define SIG_SENDBUF_NOTFULL 0x02

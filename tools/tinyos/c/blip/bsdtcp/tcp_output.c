@@ -29,7 +29,6 @@
  *	@(#)tcp_output.c	8.4 (Berkeley) 5/24/95
  */
 
-#include "syserrno.h"
 #include "lib6lowpan/ip_malloc.h"
 #include "tcp.h"
 #include "tcp_fsm.h"

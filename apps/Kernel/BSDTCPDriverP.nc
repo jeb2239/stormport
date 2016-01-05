@@ -1,4 +1,4 @@
-#include <bsdtcp/syserrno.h>
+#include <bsdtcp/sys/errno.h>
 #include "driver.h"
 
 // Number of active sockets and number of passive sockets must be the same
