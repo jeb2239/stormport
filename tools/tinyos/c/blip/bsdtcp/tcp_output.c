@@ -1038,6 +1038,15 @@ send:
 	if (len) {
 	    uint8_t* data = (uint8_t*) (buf + sizeof(struct ip6_packet) + sizeof(struct tcphdr) + optlen + ipoptlen);
 		cbuf_read_offset(tp->sendbuf, data, len, off);
+		
+		/*
+		 * If we're sending everything we've got, set PUSH.
+		 * (This will keep happy those implementations which only
+		 * give data to the user when a buffer fills or
+		 * a PUSH comes in.)
+		 */
+		if (off + len == /*sbused(&so->so_snd)*/cbuf_used_space(tp->sendbuf))
+			flags |= TH_PUSH;
 	}
 	
 	ip6 = (struct ip6_hdr*) &msg->ip6_hdr;
