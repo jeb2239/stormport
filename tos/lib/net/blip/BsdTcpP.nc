@@ -23,6 +23,7 @@ module BsdTcpP {
     
 } implementation {
 #include <bsdtcp/cbuf.h>
+#include <bsdtcp/lbuf.h>
 #include <bsdtcp/tcp_var.h>
 #include <bsdtcp/sys/errno.h>
 
@@ -52,6 +53,7 @@ module BsdTcpP {
 #include <bsdtcp/checksum.c>
 #include <bsdtcp/bitmap.c>
 #include <bsdtcp/cbuf.c>
+#include <bsdtcp/lbuf.c>
 #include <bsdtcp/cc/cc_newreno.c>
 
     struct tcpcb tcbs[NUMBSDTCPACTIVESOCKETS];
