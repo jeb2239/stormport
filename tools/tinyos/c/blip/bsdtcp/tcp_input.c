@@ -105,7 +105,7 @@ static void	 tcp_dooptions(struct tcpopt *, u_char *, int, int);
 static void
 tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
     struct tcpcb *tp, int drop_hdrlen, int tlen, uint8_t iptos,
-    uint8_t* signals);
+    uint8_t* signals, uint32_t* freedentries);
 static void	 tcp_xmit_timer(struct tcpcb *, int);
 void tcp_hc_get(/*struct in_conninfo *inc*/ struct tcpcb* tp, struct hc_metrics_lite *hc_metrics_lite);
 static void	 tcp_newreno_partial_ack(struct tcpcb *, struct tcphdr *);
@@ -499,7 +499,8 @@ drop:
    tcp_input(struct mbuf **mp, int *offp, int proto) */
 /* NOTE: tcp_fields_to_host(th) must be called before this function is called. */
 int
-tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb_listen* tpl, uint8_t* signals)
+tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb_listen* tpl,
+          uint8_t* signals, uint32_t* freedentries)
 {
 	int tlen = 0, off;
 	int thflags;
@@ -1505,7 +1506,7 @@ relocked:
 	 * state.  tcp_do_segment() always consumes the mbuf chain, unlocks
 	 * the inpcb, and unlocks pcbinfo.
 	 */
-	tcp_do_segment(ip6, th, tp, drop_hdrlen, tlen, iptos, signals);
+	tcp_do_segment(ip6, th, tp, drop_hdrlen, tlen, iptos, signals, freedentries);
 //	INP_INFO_UNLOCK_ASSERT(&V_tcbinfo);
 	return (IPPROTO_DONE);
 
@@ -1576,7 +1577,7 @@ tcp_do_segment(struct mbuf *m, struct tcphdr *th, struct socket *so,
 static void
 tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
     struct tcpcb *tp, int drop_hdrlen, int tlen, uint8_t iptos,
-    uint8_t* signals)
+    uint8_t* signals, uint32_t* freedentries)
 {
 	int thflags, acked, ourfinisacked, needoutput = 0;
 	int rstreason, todrop, win;
@@ -1797,6 +1798,8 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				/*
 				 * This is a pure ack for outstanding data.
 				 */
+				uint32_t poppedbytes; // Added by Sam
+				int ntraversed = 0; // Added by Sam
 /*
 				if (ti_locked == TI_RLOCKED)
 					INP_INFO_RUNLOCK(&V_tcbinfo);
@@ -1848,10 +1851,9 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 //				TCPSTAT_INC(tcps_rcvackpack);
 //				TCPSTAT_ADD(tcps_rcvackbyte, acked);
 //				sbdrop(&so->so_snd, acked);
-				cbuf_pop(tp->sendbuf, acked);
-				if (cbuf_free_space(tp->sendbuf) == acked && acked > 0) {
-				    *signals |= SIG_SENDBUF_NOTFULL;
-				}
+				poppedbytes = lbuf_pop(&tp->sendbuf, acked, &ntraversed);
+				KASSERT(poppedbytes == acked, ("More bytes were acked than are in the send buffer"));
+				*freedentries += ntraversed;
 				if (SEQ_GT(tp->snd_una, tp->snd_recover) &&
 				    SEQ_LEQ(th->th_ack, tp->snd_recover))
 					tp->snd_recover = th->th_ack - 1;
@@ -1898,7 +1900,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 					tcp_timer_activate(tp, TT_REXMT,
 						      tp->t_rxtcur);
 //				sowwakeup(so);
-				if (cbuf_used_space(tp->sendbuf))
+				if (lbuf_used_space(&tp->sendbuf))
 //				if (sbavail(&so->so_snd))
 					(void) tcp_output(tp);
 				goto check_delack;
@@ -2746,7 +2748,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 //					SOCKBUF_LOCK(&so->so_snd);
 //					avail = sbavail(&so->so_snd) -
 //					    (tp->snd_nxt - tp->snd_una);
-					avail = cbuf_used_space(tp->sendbuf) - (tp->snd_nxt - tp->snd_una);
+					avail = lbuf_used_space(&tp->sendbuf) - (tp->snd_nxt - tp->snd_una);
 //					SOCKBUF_UNLOCK(&so->so_snd);
 					if (avail > 0)
 						(void) tcp_output(tp);
@@ -2884,25 +2886,24 @@ process_ACK:
 		cc_ack_received(tp, th, CC_ACK);
 
 //		SOCKBUF_LOCK(&so->so_snd);
-		if (acked > /*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf)) {
-			size_t poppedbytes;
-			size_t usedspace = cbuf_used_space(tp->sendbuf);
+		if (acked > /*sbavail(&so->so_snd)*/lbuf_used_space(&tp->sendbuf)) {
+			uint32_t poppedbytes;
+			int ntraversed = 0;
+			uint32_t usedspace = lbuf_used_space(&tp->sendbuf);
 			//tp->snd_wnd -= sbavail(&so->so_snd);
 			tp->snd_wnd -= usedspace;
 //			mfree = sbcut_locked(&so->so_snd,
 //			    (int)sbavail(&so->so_snd));
-			poppedbytes = cbuf_pop(tp->sendbuf, usedspace);
+			poppedbytes = lbuf_pop(&tp->sendbuf, usedspace, &ntraversed);
 			KASSERT(poppedbytes == usedspace, ("Could not fully empty send buffer"));
-			if (usedspace == cbuf_size(tp->sendbuf) && poppedbytes > 0) {
-				*signals |= SIG_SENDBUF_NOTFULL;
-			}
+			*freedentries += ntraversed;
 			ourfinisacked = 1;
 		} else {
 //			mfree = sbcut_locked(&so->so_snd, acked);
-			size_t poppedbytes = cbuf_pop(tp->sendbuf, acked);
-			if (cbuf_free_space(tp->sendbuf) == poppedbytes && poppedbytes > 0) {
-				*signals |= SIG_SENDBUF_NOTFULL;
-			}
+			int ntraversed = 0;
+			uint32_t poppedbytes = lbuf_pop(&tp->sendbuf, acked, &ntraversed);
+			KASSERT(poppedbytes == acked, ("Could not remove acked bytes from send buffer"));
+			*freedentries += ntraversed;
 			tp->snd_wnd -= acked;
 			ourfinisacked = 0;
 		}
@@ -3737,14 +3738,13 @@ tcp_mss(struct tcpcb *tp, int offer)
 //	struct socket *so;
 	struct hc_metrics_lite metrics;
 	struct tcp_ifcap cap;
-	size_t sendbufsize = cbuf_size(tp->sendbuf);
 
 	KASSERT(tp != NULL, ("%s: tp == NULL", __func__));
 
 	bzero(&cap, sizeof(cap));
 	tcp_mss_update(tp, offer, -1, &metrics, &cap);
 
-	mss = tp->t_maxseg;
+//	mss = tp->t_maxseg;  NOT NEEDED, SINCE we removed all of the code that deals with mss. So we would just do tp->t_maxseg = mss;
 //	inp = tp->t_inpcb;
 
 	/*
@@ -3758,13 +3758,14 @@ tcp_mss(struct tcpcb *tp, int offer)
 //	so = inp->inp_socket;
 //	SOCKBUF_LOCK(&so->so_snd);
 
-
+#if 0 // It doesn't make sense to limit the mss to the size of the send buffer, since there isn't a hard limit on its size
 //	if ((/*so->so_snd.sb_hiwat*/sendbufsize == V_tcp_sendspace) && metrics.rmx_sendpipe)
 //		bufsize = metrics.rmx_sendpipe;
 //	else
 		bufsize = /*so->so_snd.sb_hiwat*/ sendbufsize;
 	if (bufsize < mss)
 		mss = bufsize;
+#endif
 #if 0 // The send buffer is statically allocated, so I can't change its size...
 	else {
 		bufsize = roundup(bufsize, mss);
@@ -3775,7 +3776,7 @@ tcp_mss(struct tcpcb *tp, int offer)
 	}
 #endif
 //	SOCKBUF_UNLOCK(&so->so_snd);
-	tp->t_maxseg = mss;
+//	tp->t_maxseg = mss;  NOT NEEDED, since we removed the code that modifies mss after assigning it to tp->t_maxseg
 
 //	SOCKBUF_LOCK(&so->so_rcv);
 #if 0 // The receive buffer is statically allocated, so I can't change its size...

@@ -47,7 +47,10 @@ uint32_t lbuf_pop(struct lbufhead* buffer, uint32_t numbytes, int* ntraversed);
    number of bytes in the entry before the start of the range is stored into
    FIRSTOFFSET. A pointer to the last entry in the range is stored into LAST,
    and the number of bytes in that entry after the end of the range is stored
-   into LASTEXTRA. */
+   into LASTEXTRA.
+   Returns 0 on success and 1 on failure. On failure, FIRST, LAST, FIRSTOFFSET,
+   and LASTEXTRA are not set. The only failure condition is when there are not
+   enough bytes in the buffer to do the full traversal. */
 int lbuf_getrange(struct lbufhead* buffer, uint32_t offset, uint32_t numbytes,
                   struct lbufent** first, uint32_t* firstoffset,
                   struct lbufent** last, uint32_t* lastextra);

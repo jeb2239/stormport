@@ -37,6 +37,7 @@
 
 #include "socket.h"
 #include "ip6.h"
+#include "lbuf.h"
 
 static void	tcp_disconnect(struct tcpcb *);
 static void	tcp_usrclosed(struct tcpcb *);
@@ -276,10 +277,10 @@ out:
 tcp_usr_send(struct socket *so, int flags, struct mbuf *m,
     struct sockaddr *nam, struct mbuf *control, struct thread *td)*/
 /* Returns error condition, and stores bytes sent into SENT. */
-static int tcp_usr_send(struct tcpcb* tp, int moretocome, uint8_t* buf, size_t buflen, size_t* sent)
+static int tcp_usr_send(struct tcpcb* tp, int moretocome, struct lbufent* data, int* status)
 {
 	int error = 0;
-	*sent = 0;
+	*status = 0;
 //	struct inpcb *inp;
 //	struct tcpcb *tp = NULL;
 #if 0
@@ -344,7 +345,7 @@ static int tcp_usr_send(struct tcpcb* tp, int moretocome, uint8_t* buf, size_t b
 	if (!(flags & PRUS_OOB)) {
 #endif // DON'T SUPPORT URGENT DATA
 		/*sbappendstream(&so->so_snd, m, flags);*/
-		*sent = cbuf_write(tp->sendbuf, buf, buflen);
+		*status = lbuf_append(&tp->sendbuf, data);
 #if 0 // DON'T SUPPORT IMPLIED CONNECTION
 		if (nam && tp->t_state < TCPS_SYN_SENT) {
 			/*

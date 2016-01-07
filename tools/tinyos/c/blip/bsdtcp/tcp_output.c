@@ -29,7 +29,8 @@
  *	@(#)tcp_output.c	8.4 (Berkeley) 5/24/95
  */
 
-#include "lib6lowpan/ip_malloc.h"
+#include <lib6lowpan/iovec.h>
+#include <lib6lowpan/ip_malloc.h>
 #include "tcp.h"
 #include "tcp_fsm.h"
 #include "tcp_var.h"
@@ -133,10 +134,16 @@ tcp_output(struct tcpcb *tp)
 	struct sackhole* p;
 	unsigned ipoptlen, optlen, hdrlen;
 	int alen;
-	char* buf, * bufreal;
+	char* buf, * bufreal; // Added by Sam
 	struct ip6_packet* msg;
   	struct ip_iovec* iov;
   	struct tcpopt to;
+  	struct ip_iovec startvec; // Added by Sam (this and the next few fields)
+  	struct ip_iovec endvec;
+  	struct lbufent* startptr = NULL;
+  	struct lbufent* endptr = NULL;
+  	uint32_t startoffset;
+  	uint32_t endextra;
   	u_char opt[TCP_MAXOLEN];
   	uint32_t ticks = get_ticks();
 #if 0
@@ -272,7 +279,7 @@ after_sack_rexmit:
 			 * itself.
 			 */
 //			if (off < sbused(&so->so_snd))
-			if (off < cbuf_used_space(tp->sendbuf))
+			if (off < lbuf_used_space(&tp->sendbuf))
 				flags &= ~TH_FIN;
 			sendwin = 1;
 		} else {
@@ -299,7 +306,7 @@ after_sack_rexmit:
 	if (sack_rxmit == 0) {
 		if (sack_bytes_rxmt == 0)
 //			len = ((long)ulmin(sbavail(&so->so_snd), sendwin) -
-			len = ((long) ulmin(cbuf_used_space(tp->sendbuf), sendwin) -
+			len = ((long) ulmin(lbuf_used_space(&tp->sendbuf), sendwin) -
 			    off);
 		else {
 			long cwin;
@@ -309,7 +316,7 @@ after_sack_rexmit:
 			 * sending new data, having retransmitted all the
 			 * data possible in the scoreboard.
 			 */
-			len = ((long)ulmin(/*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf), tp->snd_wnd) -
+			len = ((long)ulmin(/*sbavail(&so->so_snd)*/lbuf_used_space(&tp->sendbuf), tp->snd_wnd) -
 			    off);
 			/*
 			 * Don't remove this (len > 0) check !
@@ -370,7 +377,7 @@ after_sack_rexmit:
 		 */
 		len = 0;
 		if ((sendwin == 0) && (TCPS_HAVEESTABLISHED(tp->t_state)) &&
-			(off < (int) /*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf))) {
+			(off < (int) /*sbavail(&so->so_snd)*/lbuf_used_space(&tp->sendbuf))) {
 			tcp_timer_activate(tp, TT_REXMT, 0);
 			tp->t_rxtshift = 0;
 			tp->snd_nxt = tp->snd_una;
@@ -468,12 +475,12 @@ after_sack_rexmit:
 
 	if (sack_rxmit) {
 //		if (SEQ_LT(p->rxmit + len, tp->snd_una + sbused(&so->so_snd)))
-		if (SEQ_LT(p->rxmit + len, tp->snd_una + cbuf_used_space(tp->sendbuf)))
+		if (SEQ_LT(p->rxmit + len, tp->snd_una + lbuf_used_space(&tp->sendbuf)))
 			flags &= ~TH_FIN;
 	} else {
 		if (SEQ_LT(tp->snd_nxt + len, tp->snd_una +
 //		    sbused(&so->so_snd)))
-			cbuf_used_space(tp->sendbuf)))
+			lbuf_used_space(&tp->sendbuf)))
 			flags &= ~TH_FIN;
 	}
 
@@ -505,7 +512,7 @@ after_sack_rexmit:
 		if (!(tp->t_flags & TF_MORETOCOME) &&	/* normal case */
 		    (idle || (tp->t_flags & TF_NODELAY)) &&
 //		    len + off >= sbavail(&so->so_snd) &&
-			len + off >= cbuf_used_space(tp->sendbuf) &&
+			len + off >= lbuf_used_space(&tp->sendbuf) &&
 		    (tp->t_flags & TF_NOPUSH) == 0) {
 			goto send;
 		}
@@ -639,7 +646,7 @@ dontupdate:
 	 * if window is nonzero, transmit what we can,
 	 * otherwise force out a byte.
 	 */
-	if (/*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf) && !tcp_timer_active(tp, TT_REXMT) &&
+	if (/*sbavail(&so->so_snd)*/lbuf_used_space(&tp->sendbuf) && !tcp_timer_active(tp, TT_REXMT) &&
 	    !tcp_timer_active(tp, TT_PERSIST)) {
 		tp->t_rxtshift = 0;
 		tcp_setpersist(tp);
@@ -1016,7 +1023,7 @@ send:
 	/* Instead of the previous code that "grabs an mbuf", we need to do this the
 	   TinyOS way, where we ip_malloc a buffer. */	
 	// Need to ip_malloc an extra three bytes so that we can word-align the packet
-	alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + optlen + ipoptlen + len + sizeof(struct ip_iovec);
+	alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + optlen + ipoptlen + sizeof(struct ip_iovec);
 	bufreal = ip_malloc(alen + 3);
 	if (bufreal == NULL) {
 		error = ENOBUFS;
@@ -1027,16 +1034,27 @@ send:
 	memset(buf, 0, alen); // For safe measure
 	msg = (struct ip6_packet*) buf;
   	iov = (struct ip_iovec*) (buf + alen - sizeof(struct ip_iovec));
-  	iov->iov_next = NULL;
-	iov->iov_len = len + sizeof(struct tcphdr) + optlen;
+  	iov->iov_next = NULL; // if len > 0, this will be reassigned
+	iov->iov_len = sizeof(struct tcphdr) + optlen;
 	iov->iov_base = (void*) ((char*) (msg + 1) + ipoptlen);
 	msg->ip6_hdr.ip6_nxt = IANA_TCP;
 	msg->ip6_hdr.ip6_plen = htons(sizeof(struct tcphdr) + optlen + len);
 
 	msg->ip6_data = iov;
 	if (len) {
-	    uint8_t* data = (uint8_t*) (buf + sizeof(struct ip6_packet) + sizeof(struct tcphdr) + optlen + ipoptlen);
-		cbuf_read_offset(tp->sendbuf, data, len, off);
+	    uint32_t used_space = lbuf_used_space(&tp->sendbuf);
+		int rv = lbuf_getrange(&tp->sendbuf, off, len, &startptr, &startoffset, &endptr, &endextra);
+		KASSERT(!rv, ("Reading send buffer out of range!\n"));
+		// Temporarily modify the iovecs in the send buffer so we don't have to copy anything.
+		// But first, store the original iovecs so we can restore them after sending the message.
+		memcpy(&startvec, &startptr->iov, sizeof(struct ip_iovec));
+		memcpy(&endvec, &endptr->iov, sizeof(struct ip_iovec));
+		startptr->iov.iov_base += startoffset;
+		startptr->iov.iov_len -= startoffset;
+		endptr->iov.iov_len -= endextra;
+		endptr->iov.iov_next = NULL; // end of the chain
+		
+		iov->iov_next = &startptr->iov; // connect to our chain
 		
 		/*
 		 * If we're sending everything we've got, set PUSH.
@@ -1044,7 +1062,7 @@ send:
 		 * give data to the user when a buffer fills or
 		 * a PUSH comes in.)
 		 */
-		if (off + len == /*sbused(&so->so_snd)*/cbuf_used_space(tp->sendbuf))
+		if (off + len == /*sbused(&so->so_snd)*/used_space)
 			flags |= TH_PUSH;
 	}
 	
@@ -1359,6 +1377,12 @@ send:
 		// Send packet the TinyOS way
 		send_message(tp, msg, th, len + optlen + sizeof(struct tcp_hdr));
 		ip_free(bufreal);
+		
+		if (len) {
+			// Restore the iovecs
+			memcpy(&startptr->iov, &startvec, sizeof(struct ip_iovec));
+			memcpy(&endptr->iov, &endvec, sizeof(struct ip_iovec));
+		}
 //	}
 //#endif /* INET6 */
 #if 0
@@ -1464,7 +1488,7 @@ timer:
 				tp->t_rxtshift = 0;
 			}
 			tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
-		} else if (len == 0 && /*sbavail(&so->so_snd)*/cbuf_used_space(tp->sendbuf) &&
+		} else if (len == 0 && /*sbavail(&so->so_snd)*/lbuf_used_space(&tp->sendbuf) &&
 		    !tcp_timer_active(tp, TT_REXMT) &&
 		    !tcp_timer_active(tp, TT_PERSIST)) {
 			/*

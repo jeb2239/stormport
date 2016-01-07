@@ -28,8 +28,7 @@ module BsdTcpP {
 #include <bsdtcp/sys/errno.h>
 
 	#define SIG_CONN_ESTABLISHED 0x01
-    #define SIG_SENDBUF_NOTFULL 0x02
-    #define SIG_RECVBUF_NOTEMPTY 0x04
+    #define SIG_RECVBUF_NOTEMPTY 0x02
     
     #define CONN_LOST_NORMAL 0 // errno of 0 means that the connection closed gracefully
 
@@ -39,9 +38,12 @@ module BsdTcpP {
     void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay);
     void stop_timer(struct tcpcb* tcb, uint8_t timer_id);
     void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16_t port);
-    void handle_signals(struct tcpcb* tp, uint8_t signals);
+    void handle_signals(struct tcpcb* tp, uint8_t signals, uint32_t freedentries);
     void connection_lost(struct tcpcb* tp, uint8_t reason);
-    
+
+#include <bsdtcp/bitmap.c>
+#include <bsdtcp/cbuf.c>
+#include <bsdtcp/lbuf.c>    
 #include <bsdtcp/tcp_subr.c>
 #include <bsdtcp/tcp_output.c>
 #include <bsdtcp/tcp_input.c>
@@ -51,9 +53,6 @@ module BsdTcpP {
 #include <bsdtcp/tcp_reass.c>
 #include <bsdtcp/tcp_sack.c>
 #include <bsdtcp/checksum.c>
-#include <bsdtcp/bitmap.c>
-#include <bsdtcp/cbuf.c>
-#include <bsdtcp/lbuf.c>
 #include <bsdtcp/cc/cc_newreno.c>
 
     struct tcpcb tcbs[NUMBSDTCPACTIVESOCKETS];
@@ -114,7 +113,7 @@ module BsdTcpP {
         }
     }
     
-    void handle_signals(struct tcpcb* tp, uint8_t signals) {
+    void handle_signals(struct tcpcb* tp, uint8_t signals, uint32_t freedentries) {
         struct sockaddr_in6 addrport;
         
         if (signals & SIG_CONN_ESTABLISHED) {
@@ -123,11 +122,13 @@ module BsdTcpP {
         
             signal BSDTCPActiveSocket.connectDone[tp->index](&addrport);
         }
-        if (signals & SIG_SENDBUF_NOTFULL) {
-            signal BSDTCPActiveSocket.sendReady[tp->index]();
-        }
+        
         if (signals & SIG_RECVBUF_NOTEMPTY) {
             signal BSDTCPActiveSocket.receiveReady[tp->index]();
+        }
+        
+        if (freedentries > 0) {
+            signal BSDTCPActiveSocket.sendDone[tp->index](freedentries);
         }
     }
     
@@ -142,6 +143,11 @@ module BsdTcpP {
         struct tcpcb* tcb;
         struct tcpcb_listen* tcbl;
         uint8_t signals = 0; // bitmask of signals that need to be sent to an upper layer
+        uint32_t freedentries = 0; // number of lbuf entries that an upper layer can reclaim
+        struct ip_iovec wrapper; // to calculate the checksum
+        wrapper.iov_base = packet;
+        wrapper.iov_len = len;
+        wrapper.iov_next = NULL;
         
         th = (struct tcphdr*) packet;
         sport = th->th_sport; // network byte order
@@ -152,7 +158,7 @@ module BsdTcpP {
             ntohs(sport), ntohs(dport),
             (th->th_flags & TH_SYN) != 0, (th->th_flags & TH_ACK) != 0, (th->th_flags & TH_FIN) != 0);
         #endif
-        if (get_checksum(&iph->ip6_src, &iph->ip6_dst, th, len)) {
+        if (get_checksum(&iph->ip6_src, &iph->ip6_dst, &wrapper, len)) {
             printf("Dropping packet: bad checksum\n");
             return;
         }
@@ -162,10 +168,10 @@ module BsdTcpP {
             if (tcb->t_state != TCP6S_CLOSED && dport == tcb->lport && sport == tcb->fport && !memcmp(&iph->ip6_src, &tcb->faddr, sizeof(iph->ip6_src))) {
                 // Matches this active socket
                 printf("Matches active socket %d\n", i); 
-                if (RELOOKUP_REQUIRED == tcp_input(iph, (struct tcphdr*) packet, &tcbs[i], NULL, &signals)) {
+                if (RELOOKUP_REQUIRED == tcp_input(iph, (struct tcphdr*) packet, &tcbs[i], NULL, &signals, &freedentries)) {
                     break;
                 } else {
-                    handle_signals(&tcbs[i], signals);
+                    handle_signals(&tcbs[i], signals, freedentries);
                 }
                 return;
             }
@@ -175,7 +181,7 @@ module BsdTcpP {
             if (tcbl->t_state == TCP6S_LISTEN && dport == tcbl->lport) {
                 // Matches this passive socket
                 printf("Matches passive socket %d\n", i);
-                tcp_input(iph, (struct tcphdr*) packet, NULL, &tcbls[i], NULL);
+                tcp_input(iph, (struct tcphdr*) packet, NULL, &tcbls[i], NULL, NULL);
                 return;
             }
         }
@@ -258,9 +264,9 @@ module BsdTcpP {
         return tcp6_usr_connect(tp, addr);
     }
     
-    command error_t BSDTCPActiveSocket.send[uint8_t asockid](uint8_t* data, uint32_t length, int moretocome, size_t* bytessent) {
+    command error_t BSDTCPActiveSocket.send[uint8_t asockid](struct lbufent* data, int moretocome, int* status) {
         struct tcpcb* tp = &tcbs[asockid];
-        return (error_t) tcp_usr_send(tp, moretocome, data, length, bytessent);
+        return (error_t) tcp_usr_send(tp, moretocome, data, status);
     }
     
     command error_t BSDTCPActiveSocket.receive[uint8_t asockid](uint8_t* buffer, uint32_t len, size_t* bytessent) {
@@ -298,7 +304,7 @@ module BsdTcpP {
     default event void BSDTCPActiveSocket.connectDone[uint8_t asockid](struct sockaddr_in6* addr) {
     }
     
-    default event void BSDTCPActiveSocket.sendReady[uint8_t asockid]() {
+    default event void BSDTCPActiveSocket.sendDone[uint8_t asockid](uint32_t numentries) {
     }
     
     default event void BSDTCPActiveSocket.receiveReady[uint8_t asockid]() {
@@ -313,7 +319,7 @@ module BsdTcpP {
         msg->ip6_hdr.ip6_vfc = IPV6_VERSION;
         call IPAddress.setSource(&msg->ip6_hdr);
         th->th_sum = 0; // should be zero already, but just in case
-        th->th_sum = get_checksum(&msg->ip6_hdr.ip6_src, &msg->ip6_hdr.ip6_dst, th, tlen);
+        th->th_sum = get_checksum(&msg->ip6_hdr.ip6_src, &msg->ip6_hdr.ip6_dst, msg->ip6_data, tlen);
         inet_ntop6(&msg->ip6_hdr.ip6_dst, destaddr, 50);
         printf("Sending message to %s\n", destaddr);
         printf("Return value: %d\n", call IP.send(msg));

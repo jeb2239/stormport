@@ -1,3 +1,4 @@
+#include <bsdtcp/lbuf.h>
 #include <bsdtcp/sys/errno.h>
 #include "driver.h"
 
@@ -16,7 +17,7 @@ module BSDTCPDriverP {
     
     typedef struct {
         tcp_lite_callback_t connectDone;
-        tcp_lite_callback_t sendReady;
+        tcp_lite_callback_t sendDone;
         tcp_lite_callback_t recvReady;
         tcp_lite_callback_t connectionLost;
         uint8_t readycbs;
@@ -43,19 +44,20 @@ module BSDTCPDriverP {
     
     void clear_activesocket(int i) {
         activesockets[i].connectDone.addr = 0;
-        activesockets[i].connectDone.type = CONNECT_DONE;
-        activesockets[i].sendReady.addr = 0;
-        activesockets[i].sendReady.type = SEND_READY;
+        activesockets[i].connectDone.type = TCP_CONNECT_DONE_CB;
+        activesockets[i].sendDone.addr = 0;
+        activesockets[i].sendDone.type = TCP_SEND_DONE_CB;
+        activesockets[i].sendDone.arg0 = 0;
         activesockets[i].recvReady.addr = 0;
-        activesockets[i].recvReady.type = RECV_READY;
+        activesockets[i].recvReady.type = TCP_RECV_READY_CB;
         activesockets[i].connectionLost.addr = 0;
-        activesockets[i].connectionLost.type = CONNECTION_LOST;
+        activesockets[i].connectionLost.type = TCP_CONNECTION_LOST_CB;
     }
     
     void clear_passivesocket(int i) {
         passivesockets[i].acceptinginto = -1;
         passivesockets[i].acceptDone.addr = 0;
-        passivesockets[i].acceptDone.type = ACCEPT_DONE;
+        passivesockets[i].acceptDone.type = TCP_ACCEPT_DONE_CB;
     }
     
     command error_t Init.init() {
@@ -70,26 +72,26 @@ module BSDTCPDriverP {
         }
         passive = FALSE;
         socket_idx = 0;
-        cb_type = CONNECT_DONE;
+        cb_type = TCP_CONNECT_DONE_CB;
     }
     
     /* Increments *CBT, and returns TRUE if it wrapped. */
     bool next_cb_type(uint8_t* cbt) {
         switch (*cbt) {
-        case CONNECT_DONE:
-            *cbt = SEND_READY;
+        case TCP_CONNECT_DONE_CB:
+            *cbt = TCP_SEND_DONE_CB;
             return FALSE;
-        case SEND_READY:
-            *cbt = RECV_READY;
+        case TCP_SEND_DONE_CB:
+            *cbt = TCP_RECV_READY_CB;
             return FALSE;
-        case RECV_READY:
-            *cbt = CONNECTION_LOST;
+        case TCP_RECV_READY_CB:
+            *cbt = TCP_CONNECTION_LOST_CB;
             return FALSE;
-        case CONNECTION_LOST:
-            *cbt = ACCEPT_DONE;
+        case TCP_CONNECTION_LOST_CB:
+            *cbt = TCP_ACCEPT_DONE_CB;
             return FALSE;
-        case ACCEPT_DONE:
-            *cbt = CONNECT_DONE;
+        case TCP_ACCEPT_DONE_CB:
+            *cbt = TCP_CONNECT_DONE_CB;
             return TRUE;
         default:
             return FALSE;
@@ -98,15 +100,15 @@ module BSDTCPDriverP {
     
     tcp_lite_callback_t* get_callback(uint8_t sock_idx, uint8_t cbt) {
         switch (cbt) {
-        case CONNECT_DONE:
+        case TCP_CONNECT_DONE_CB:
             return &activesockets[sock_idx].connectDone;
-        case SEND_READY:
-            return &activesockets[sock_idx].sendReady;
-        case RECV_READY:
+        case TCP_SEND_DONE_CB:
+            return &activesockets[sock_idx].sendDone;
+        case TCP_RECV_READY_CB:
             return &activesockets[sock_idx].recvReady;
-        case CONNECTION_LOST:
+        case TCP_CONNECTION_LOST_CB:
             return &activesockets[sock_idx].connectionLost;
-        case ACCEPT_DONE:
+        case TCP_ACCEPT_DONE_CB:
             return (tcp_lite_callback_t*) &passivesockets[sock_idx].acceptDone;
         default:
             return NULL;
@@ -137,6 +139,9 @@ module BSDTCPDriverP {
             passivesockets[socket_idx].readycbs &= ~cb_type;
         } else {
             activesockets[socket_idx].readycbs &= ~cb_type;
+            if (cb_type == TCP_SEND_DONE_CB) {
+                activesockets[socket_idx].sendDone.arg0 = 0; // Clear outstanding callbacks
+            }
         }
     }
     
@@ -144,29 +149,30 @@ module BSDTCPDriverP {
         passivesockets[pi].acceptDone.arg0 = (uint8_t) passivesockets[pi].acceptinginto;
         memcpy(&passivesockets[pi].acceptDone.src_address, &addr->sin6_addr, sizeof(struct in6_addr));
         passivesockets[pi].acceptDone.src_port = ntohs(addr->sin6_port);
-        passivesockets[pi].readycbs |= ACCEPT_DONE;
+        passivesockets[pi].readycbs |= TCP_ACCEPT_DONE_CB;
         passivesockets[pi].acceptinginto = -1;
         printf("Accepted connection!\n");
     }
     
     event void BSDTCPActiveSocket.connectDone[uint8_t ai](struct sockaddr_in6* addr) {
-        activesockets[ai].readycbs |= CONNECT_DONE;
+        activesockets[ai].readycbs |= TCP_CONNECT_DONE_CB;
         printf("Connection done!\n");
     }
     
     event void BSDTCPActiveSocket.receiveReady[uint8_t ai]() {
-        activesockets[ai].readycbs |= RECV_READY;
+        activesockets[ai].readycbs |= TCP_RECV_READY_CB;
         printf("Receive ready!\n");
     }
     
-    event void BSDTCPActiveSocket.sendReady[uint8_t ai]() {
-        activesockets[ai].readycbs |= SEND_READY;
-        printf("Send ready!\n");
+    event void BSDTCPActiveSocket.sendDone[uint8_t ai](uint32_t numentries) {
+        activesockets[ai].sendDone.arg0 += (uint8_t) numentries;
+        activesockets[ai].readycbs |= TCP_SEND_DONE_CB;
+        printf("Send done!\n");
     }
     
     event void BSDTCPActiveSocket.connectionLost[uint8_t ai](uint8_t how) {
         activesockets[ai].connectionLost.arg0 = how;
-        activesockets[ai].readycbs |= CONNECTION_LOST;
+        activesockets[ai].readycbs |= TCP_CONNECTION_LOST_CB;
         printf("Connection lost!\n");
     }
     
@@ -202,7 +208,7 @@ module BSDTCPDriverP {
         return EBADF;
     }
     
-    default command error_t BSDTCPActiveSocket.send[uint8_t aundef](uint8_t* data, uint32_t length, int moretocome, size_t* bytessent) {
+    default command error_t BSDTCPActiveSocket.send[uint8_t aundef](struct lbufent* data, int moretocome, int* status) {
         return EBADF;
     }
     
@@ -354,13 +360,11 @@ module BSDTCPDriverP {
                 rv = (syscall_rv_t) call BSDTCPPassiveSocket.listenaccept[fd](call BSDTCPActiveSocket.getID[afd]());
                 printf("Accepting into socket %d\n", afd);
                 break;
-            case 0x05: // send(fd, buffer, length, numbytes)
+            case 0x05: // send(fd, data, status)
                 if (fd < 0 || passive) {
                     break;
                 }
-                buffer = (uint8_t*) arg1;
-                length = (size_t) arg2;
-                rv = (syscall_rv_t) call BSDTCPActiveSocket.send[fd](buffer, length, 0, (size_t*) argx[0]);
+                rv = (syscall_rv_t) call BSDTCPActiveSocket.send[fd]((struct lbufent*) arg1, 0, (int*) arg2);
                 break;
             case 0x06: // receive(fd, buffer, length, numbytes)
                 if (fd < 0 || passive) {
@@ -405,11 +409,11 @@ module BSDTCPDriverP {
                 }
                 tostore = &activesockets[fd].connectDone;
                 goto setcb;
-            case 0x0b: // set_sendReady_cb(fd, cb, r)
+            case 0x0b: // set_sendDone_cb(fd, cb, r)
                 if (fd < 0 || passive) {
                     break;
                 }
-                tostore = &activesockets[fd].sendReady;
+                tostore = &activesockets[fd].sendDone;
                 goto setcb;
             case 0x0c: // set_recvReady_cb(fd, cb, r)
                 if (fd < 0 || passive) {

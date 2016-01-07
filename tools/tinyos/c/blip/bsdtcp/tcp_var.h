@@ -36,6 +36,7 @@
 //#include <netinet/tcp.h>
 #include "bitmap.h"
 #include "cc.h"
+#include "lbuf.h"
 #include "tcp.h"
 #include "types.h"
 
@@ -107,7 +108,6 @@ struct tcpcb_listen {
 #define tpcantsendmore(tp) (tp)->bufstate |= TCB_CANTSENDMORE
 
 #define CBUF_OVERHEAD 12
-#define SENDBUF_SIZE 185
 #define RECVBUF_SIZE 185
 #define REASSBMP_SIZE BITS_TO_BYTES(RECVBUF_SIZE - CBUF_OVERHEAD)
 
@@ -132,8 +132,9 @@ struct tcpcb {
 	bool passiveopen; // Remembers if this TCB was initialized via a passive open or active open
 	
 	uint8_t bufstate;
+	
+	struct lbufhead sendbuf;
 	uint8_t recvbuf[RECVBUF_SIZE];
-	uint8_t sendbuf[SENDBUF_SIZE];
 	uint8_t reassbmp[REASSBMP_SIZE];
 	int16_t reass_fin_index;
 	

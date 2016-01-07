@@ -4,14 +4,18 @@
 #include "tcp.h"
 
 inline uint16_t deref_safe(uint16_t* unaligned) {
-    return ((uint16_t) *((uint8_t*) unaligned)) | (((uint16_t) *(((uint8_t*) unaligned) + 1)) << 8);
+    return ((uint16_t) *((uint8_t*) unaligned))
+        | (((uint16_t) *(((uint8_t*) unaligned) + 1)) << 8);
 }
 
 uint16_t get_checksum(struct in6_addr* src, struct in6_addr* dest,
-                      struct tcphdr* tcpseg, uint32_t len) {
+                      struct ip_iovec* tcpseg, uint32_t len) {
     uint32_t total;
     uint16_t* current;
     uint16_t* end;
+    uint8_t* currbuf;
+    uint32_t currlen;
+    int starthalf; // 1 if the end of the last iovec was not half-word aligned
     struct {
         struct in6_addr srcaddr;
         struct in6_addr destaddr;
@@ -34,21 +38,33 @@ uint16_t get_checksum(struct in6_addr* src, struct in6_addr* dest,
          current < (uint16_t*) (&pseudoheader + 1); current++) {
         total += (uint32_t) *current;
     }
-    
-    end = (uint16_t*) (((uint8_t*) tcpseg) + len);
-    
-    if (len & 0x1u) {
-        // Edge case for odd-length packet
-        end = (uint16_t*) (((uint8_t*) end) - 1);
-        total += ((uint16_t) *((uint8_t*) end));
-    }
-    
-    for (current = (uint16_t*) tcpseg;
-        current < end; current++) {
-        // read the memory byte by byte, in case tcpseg isn't word-aligned 
-        total += deref_safe(current);
-    }
-    
+
+    starthalf = 0;
+    do {
+        current = (uint16_t*) tcpseg->iov_base;
+        currlen = (uint32_t) tcpseg->iov_len;
+        if (starthalf && currlen > 0) {
+            total += ((uint32_t) *((uint8_t*) current)) << 8;
+            current += 1;
+            currlen -= 1;
+        }
+        if (currlen & 0x1u) {
+            // This iovec does not end on a half-word boundary
+            end = (uint16_t*) (((uint8_t*) current) + currlen - 1);
+            total += *((uint8_t*) end);
+            starthalf = 1;
+        } else {
+            // This iovec ends on a half-word boundary
+            end = (uint16_t*) (((uint8_t*) current) + currlen);
+            starthalf = 0;
+        }
+        while (current != end) {
+            // read the memory byte by byte, in case iovec isn't word-aligned 
+            total += deref_safe(current++);
+        }
+        tcpseg = tcpseg->iov_next;
+    } while (tcpseg != NULL);
+        
     while (total >> 16) {
         total = (total & 0xFFFF) + (total >> 16);
     }

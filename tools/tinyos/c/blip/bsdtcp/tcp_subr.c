@@ -39,6 +39,7 @@
 #include "bitmap.h"
 #include "cbuf.h"
 #include "cc.h"
+#include "lbuf.h"
 
 /* EXTERN DECLARATIONS FROM TCP_TIMER.H */ 
 int tcp_keepinit;		/* time to establish connection */
@@ -218,7 +219,6 @@ tcp_state_change(struct tcpcb *tp, int newstate)
 
  /* This is based on tcp_newtcb in tcp_subr.c, and tcp_usr_attach in tcp_usrreq.c. */
 void initialize_tcb(struct tcpcb* tp, uint16_t lport, int index) {
-	int rv1, rv2;
 	uint32_t ticks = get_ticks();
 	
     memset(tp, 0x00, sizeof(struct tcpcb));
@@ -260,10 +260,9 @@ void initialize_tcb(struct tcpcb* tp, uint16_t lport, int index) {
 	/* From tcp_usr_attach in tcp_usrreq.c. */
 	tp->t_state = TCP6S_CLOSED;
 	
-	rv1 = cbuf_init(tp->sendbuf, SENDBUF_SIZE);
-	rv2 = cbuf_init(tp->recvbuf, RECVBUF_SIZE);
-	if (rv1 != 0 || rv2 != 0) {
-		printf("Buffers too small!\n");
+	lbuf_init(&tp->sendbuf);
+	if (cbuf_init(tp->recvbuf, RECVBUF_SIZE) != 0) {
+		printf("TCP receive buffer too small!\n");
 	}
 }
 

@@ -1,3 +1,5 @@
+#include <bsdtcp/lbuf.h>
+
 interface BSDTCPActiveSocket {
     command int getID();
     command int getState();
@@ -7,8 +9,8 @@ interface BSDTCPActiveSocket {
     command error_t connect(struct sockaddr_in6* addr);
     event void connectDone(struct sockaddr_in6* addr);
     
-    event void sendReady();
-    command error_t send(uint8_t* data, uint32_t length, int moretocome, size_t* bytessent);
+    event void sendDone(uint32_t freedentries);
+    command error_t send(struct lbufent* data, int moretocome, int* status);
     
     event void receiveReady();
     command error_t receive(uint8_t* buffer, uint32_t length, size_t* bytessent);

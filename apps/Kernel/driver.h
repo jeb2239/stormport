@@ -42,12 +42,12 @@ typedef struct
 } ble_callback_t;
 
 #define NUM_CB_TYPES 5
-#define CONNECT_DONE 0x01
-#define SEND_READY 0x02
-#define RECV_READY 0x04
-#define CONNECTION_LOST 0x08
-#define ACCEPT_DONE 0x10
-#define IS_PASSIVE_CB(cbt) ((cbt) == ACCEPT_DONE)
+#define TCP_CONNECT_DONE_CB 0x01
+#define TCP_SEND_DONE_CB 0x02
+#define TCP_RECV_READY_CB 0x04
+#define TCP_CONNECTION_LOST_CB 0x08
+#define TCP_ACCEPT_DONE_CB 0x10
+#define IS_PASSIVE_CB(cbt) ((cbt) == TCP_ACCEPT_DONE_CB)
 
 typedef struct
 {
