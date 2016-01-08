@@ -3192,7 +3192,10 @@ dodata:							/* XXX */
 				tp->t_flags |= TF_ACKNOW;
 			tp->rcv_nxt++;
 		}
-		tp->reass_fin_index = -2; // Added by Sam: make sure not to consider any more FINs in reassembly
+		if (tp->reass_fin_index != -2) {
+			*signals |= SIG_RCVD_FIN;
+			tp->reass_fin_index = -2; // Added by Sam: make sure not to consider any more FINs in reassembly
+		}
 		switch (tp->t_state) {
 
 		/*

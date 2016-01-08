@@ -12,7 +12,7 @@ interface BSDTCPActiveSocket {
     event void sendDone(uint32_t freedentries);
     command error_t send(struct lbufent* data, int moretocome, int* status);
     
-    event void receiveReady();
+    event void receiveReady(int gotfin);
     command error_t receive(uint8_t* buffer, uint32_t length, size_t* bytessent);
     
     event void connectionLost(uint8_t how);

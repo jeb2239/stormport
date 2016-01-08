@@ -159,7 +159,7 @@ module BSDTCPDriverP {
         printf("Connection done!\n");
     }
     
-    event void BSDTCPActiveSocket.receiveReady[uint8_t ai]() {
+    event void BSDTCPActiveSocket.receiveReady[uint8_t ai](int gotfin) {
         activesockets[ai].readycbs |= TCP_RECV_READY_CB;
         printf("Receive ready!\n");
     }
@@ -310,6 +310,7 @@ module BSDTCPDriverP {
         uint8_t* buffer;
         int fd;
         int afd;
+        int state;
         size_t length;
         uint32_t svc_id;
         tcp_lite_callback_t* tostore;
@@ -442,6 +443,13 @@ module BSDTCPDriverP {
                     break;
                 }
                 rv = (syscall_rv_t) TCPS_HAVEESTABLISHED(call BSDTCPActiveSocket.getState[fd]());
+                break;
+            case 0x10: // hasrcvdfin(fd)
+                if (fd < 0 || passive) {
+                    break;
+                }
+                state = call BSDTCPActiveSocket.getState[fd]();
+                rv = (syscall_rv_t) (state == TCPS_TIME_WAIT || state == TCPS_CLOSE_WAIT || state == TCPS_LAST_ACK || state == TCPS_CLOSING);
             default:
                 printf("Doing nothing\n");
                 break;

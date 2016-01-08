@@ -425,11 +425,11 @@ implementation
                     tcp_full_callback_t* cf;
                     char v6addr[40];
                     switch (c->type) {
-                        case TCP_RECV_READY_CB:
                         case TCP_CONNECT_DONE_CB:
                             __inject_function1((void*) c->addr, c->r);
                             break;
                         case TCP_SEND_DONE_CB:
+                        case TCP_RECV_READY_CB:
                         case TCP_CONNECTION_LOST_CB:
                             __inject_function2((void*) c->addr, c->r, (uint32_t) c->arg0);
                             break;

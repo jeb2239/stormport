@@ -29,6 +29,7 @@ module BsdTcpP {
 
 	#define SIG_CONN_ESTABLISHED 0x01
     #define SIG_RECVBUF_NOTEMPTY 0x02
+    #define SIG_RCVD_FIN         0x04
     
     #define CONN_LOST_NORMAL 0 // errno of 0 means that the connection closed gracefully
 
@@ -124,7 +125,11 @@ module BsdTcpP {
         }
         
         if (signals & SIG_RECVBUF_NOTEMPTY) {
-            signal BSDTCPActiveSocket.receiveReady[tp->index]();
+            signal BSDTCPActiveSocket.receiveReady[tp->index](0);
+        }
+        
+        if (signals & SIG_RCVD_FIN) {
+            signal BSDTCPActiveSocket.receiveReady[tp->index](1);
         }
         
         if (freedentries > 0) {
@@ -307,7 +312,7 @@ module BsdTcpP {
     default event void BSDTCPActiveSocket.sendDone[uint8_t asockid](uint32_t numentries) {
     }
     
-    default event void BSDTCPActiveSocket.receiveReady[uint8_t asockid]() {
+    default event void BSDTCPActiveSocket.receiveReady[uint8_t asockid](int gotfin) {
     }
     
     default event void BSDTCPActiveSocket.connectionLost[uint8_t asockid](uint8_t how) {
