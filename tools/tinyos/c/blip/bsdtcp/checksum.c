@@ -45,7 +45,7 @@ uint16_t get_checksum(struct in6_addr* src, struct in6_addr* dest,
         currlen = (uint32_t) tcpseg->iov_len;
         if (starthalf && currlen > 0) {
             total += ((uint32_t) *((uint8_t*) current)) << 8;
-            current += 1;
+            current = (uint16_t*) (((uint8_t*) current) + 1);
             currlen -= 1;
         }
         if (currlen & 0x1u) {

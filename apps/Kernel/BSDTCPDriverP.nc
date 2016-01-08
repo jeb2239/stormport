@@ -201,7 +201,7 @@ module BSDTCPDriverP {
     }
     
     default command int BSDTCPActiveSocket.getState[uint8_t aundef]() {
-        return 0; // BE CAREFUL
+        return TCPS_CLOSED; // BE CAREFUL
     }
     
     default command error_t BSDTCPActiveSocket.connect[uint8_t aundef](struct sockaddr_in6* addr) {
@@ -437,6 +437,11 @@ module BSDTCPDriverP {
                 tostore->r = (void*) arg2;
                 rv = 0;
                 break;
+            case 0x0f: // isestablished(fd)
+                if (fd < 0 || passive) {
+                    break;
+                }
+                rv = (syscall_rv_t) TCPS_HAVEESTABLISHED(call BSDTCPActiveSocket.getState[fd]());
             default:
                 printf("Doing nothing\n");
                 break;
