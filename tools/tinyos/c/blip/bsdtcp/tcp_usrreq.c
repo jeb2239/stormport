@@ -299,7 +299,7 @@ static int tcp_usr_send(struct tcpcb* tp, int moretocome, struct lbufent* data, 
 		goto out;
 	}
 	
-	if (tp->t_state == TCP6S_TIME_WAIT) { // copied from the commented-out code from below
+	if ((tp->t_state == TCPS_TIME_WAIT) || (tp->t_state == TCPS_CLOSED)) { // copied from the commented-out code from below
 		error = ECONNRESET;
 		goto out;
 	}
@@ -463,7 +463,7 @@ tcp_usr_rcvd(struct tcpcb* tp/*, int flags*/)
 //	struct inpcb *inp;
 //	struct tcpcb *tp = NULL;
 	int error = 0;
-	if (tp->t_state == TCP6S_TIME_WAIT) {
+	if ((tp->t_state == TCPS_TIME_WAIT) || (tp->t_state == TCPS_CLOSED)) {
 		error = ECONNRESET;
 		goto out;
 	}
@@ -527,7 +527,7 @@ tcp_disconnect(struct tcpcb *tp)
 //		soisdisconnecting(so);
 //		sbflush(&so->so_rcv);
 		tcp_usrclosed(tp);
-//		if (!(inp->inp_flags & INP_DROPPED))
+		if (/*!(inp->inp_flags & INP_DROPPED)*/tp->t_state != TCPS_CLOSED)
 			tcp_output(tp);
 	}
 }
@@ -550,11 +550,8 @@ tcp_usr_shutdown(struct tcpcb* tp)
 	INP_WLOCK(inp);
 #endif
 	if (/*inp->inp_flags & (INP_TIMEWAIT | INP_DROPPED)*/
-	    tp->t_state == TCP6S_TIME_WAIT) {
+	    (tp->t_state == TCPS_TIME_WAIT) || (tp->t_state == TCPS_CLOSED)) {
 		error = ECONNRESET;
-		goto out;
-	}
-	if (tp->t_state == TCPS_CLOSED) { // Added by Sam: omit the tcp_output() call in this case
 		goto out;
 	}
 #if 0
@@ -564,7 +561,7 @@ tcp_usr_shutdown(struct tcpcb* tp)
 //	socantsendmore(so);
 	tpcantsendmore(tp);
 	tcp_usrclosed(tp);
-//	if (!(inp->inp_flags & INP_DROPPED))
+	if (/*!(inp->inp_flags & INP_DROPPED)*/tp->t_state != TCPS_CLOSED)
 		error = tcp_output(tp);
 
 out:
@@ -661,7 +658,7 @@ tcp_usr_close(struct tcpcb* tp/*struct socket *so*/)
 	 * If we still have full TCP state, and we're not dropped, initiate
 	 * a disconnect.
 	 */
-	if (tp->t_state != TCP6S_TIME_WAIT/*!(inp->inp_flags & INP_TIMEWAIT) &&
+	if ((tp->t_state != TCP6S_TIME_WAIT) && (tp->t_state != TCPS_CLOSED)/*!(inp->inp_flags & INP_TIMEWAIT) &&
 	    !(inp->inp_flags & INP_DROPPED)*/) {
 //		tp = intotcpcb(inp);
 //		TCPDEBUG1();

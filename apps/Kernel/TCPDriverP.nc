@@ -5,7 +5,7 @@
 // Number of active sockets and number of passive sockets must be the same
 #define NUMSOCKETS 2
 
-module BSDTCPDriverP {
+module TCPDriverP {
     provides interface Driver;
     provides interface Init;
     uses interface BSDTCPActiveSocket[uint8_t aclient];
@@ -450,6 +450,7 @@ module BSDTCPDriverP {
                 }
                 state = call BSDTCPActiveSocket.getState[fd]();
                 rv = (syscall_rv_t) (state == TCPS_TIME_WAIT || state == TCPS_CLOSE_WAIT || state == TCPS_LAST_ACK || state == TCPS_CLOSING);
+                break;
             default:
                 printf("Doing nothing\n");
                 break;

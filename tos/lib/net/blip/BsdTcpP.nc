@@ -27,7 +27,7 @@ module BsdTcpP {
 #include <bsdtcp/tcp_var.h>
 #include <bsdtcp/sys/errno.h>
 
-	#define SIG_CONN_ESTABLISHED 0x01
+    #define SIG_CONN_ESTABLISHED 0x01
     #define SIG_RECVBUF_NOTEMPTY 0x02
     #define SIG_RCVD_FIN         0x04
     
@@ -92,25 +92,25 @@ module BsdTcpP {
         
         switch(timer_id) {
         case TOS_DELACK:
-        	printf("Delayed ACK\n");
-        	tcp_timer_delack(tp);
-        	break;
+            printf("Delayed ACK\n");
+            tcp_timer_delack(tp);
+            break;
         case TOS_REXMT:
             printf("Retransmit\n");
-		    tcp_timer_rexmt(tp);
-		    break;
-	    case TOS_PERSIST:
-	        printf("Persist\n");
-	        tcp_timer_persist(tp);
-		    break;
-	    case TOS_KEEP:
-	        printf("Keep\n");
-	        tcp_timer_keep(tp);
-		    break;
-	    case TOS_2MSL:
-	        printf("2MSL\n");
-	        tcp_timer_2msl(tp);
-		    break;
+            tcp_timer_rexmt(tp);
+            break;
+        case TOS_PERSIST:
+            printf("Persist\n");
+            tcp_timer_persist(tp);
+            break;
+        case TOS_KEEP:
+            printf("Keep\n");
+            tcp_timer_keep(tp);
+            break;
+        case TOS_2MSL:
+            printf("2MSL\n");
+            tcp_timer_2msl(tp);
+            break;
         }
     }
     
@@ -252,8 +252,8 @@ module BsdTcpP {
     command error_t BSDTCPPassiveSocket.listenaccept[uint8_t psockid](int asockid) {
         tcbls[psockid].t_state = TCPS_LISTEN;
         if (tcbs[asockid].t_state != TCPS_CLOSED) {
-        	tcbls[psockid].t_state = TCPS_CLOSED;
-        	return EISCONN;
+            tcbls[psockid].t_state = TCPS_CLOSED;
+            return EISCONN;
         }
         initialize_tcb(&tcbs[asockid], tcbs[asockid].lport, tcbs[asockid].index);
         tcbls[psockid].acceptinto = &tcbs[asockid];
@@ -335,7 +335,7 @@ module BsdTcpP {
     }
     
     uint32_t get_millis() {
-    	return call TickTimer.getNow();
+        return call TickTimer.getNow();
     }
     
     void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay) {
