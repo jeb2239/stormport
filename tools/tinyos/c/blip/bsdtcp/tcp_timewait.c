@@ -29,7 +29,9 @@
  *	@(#)tcp_subr.c	8.2 (Berkeley) 5/24/95
  */
 
-int V_nolocaltimewait = 0; // For now, to keep things simple
+enum tcp_timewait_consts {
+    V_nolocaltimewait = 0 // For now, to keep things simple
+};
 
 static void
 tcp_tw_2msl_reset(struct tcpcb* tp, int rearm)

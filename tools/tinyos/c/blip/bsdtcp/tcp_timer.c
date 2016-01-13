@@ -32,16 +32,18 @@
 
 #include "lbuf.h"
 
-int	tcp_keepcnt = TCPTV_KEEPCNT;
-
+int tcp_keepcnt = TCPTV_KEEPCNT;
 int V_tcp_pmtud_blackhole_detect = 0;
-int V_tcp_v6pmtud_blackhole_mss = FRAGLIMIT_6LOWPAN - sizeof(struct ip6_hdr) - sizeof(struct tcphdr); // Doesn't matter unless blackhole_detect is 1.
 int V_tcp_pmtud_blackhole_failed = 0;
 int V_tcp_pmtud_blackhole_activated = 0;
 int V_tcp_pmtud_blackhole_activated_min_mss = 0;
 
-int tcp_rexmit_drop_options = 1; // drop options after a few retransmits
-int always_keepalive = 1;
+enum tcp_timer_consts {
+    V_tcp_v6pmtud_blackhole_mss = FRAGLIMIT_6LOWPAN - sizeof(struct ip6_hdr) - sizeof(struct tcphdr), // Doesn't matter unless blackhole_detect is 1.
+
+    tcp_rexmit_drop_options = 1, // drop options after a few retransmits
+    always_keepalive = 1,
+};
 
 /*
  * TCP timer processing.

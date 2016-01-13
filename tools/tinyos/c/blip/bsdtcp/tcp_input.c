@@ -79,23 +79,24 @@
 #include "ip6.h"
 #include "sys/queue.h"
 
-const int tcprexmtthresh = 3;
-const int V_drop_synfin = 0;
 // Copied from in.h
 #define IPPROTO_DONE 267
 // My own constant
 #define RELOOKUP_REQUIRED -1
 
 // I may change some of these flags later
-int V_tcp_do_ecn = 0;
-int V_tcp_do_rfc3042 = 0;
-int tcp_fast_finwait2_recycle = 0;
-const int V_tcp_do_sack = 1;
-const int V_path_mtu_discovery = 0;
-const int V_tcp_delack_enabled = 1;
-const int V_tcp_initcwnd_segments = 0;
-const int V_tcp_do_rfc3390 = 0;
-const int V_tcp_abc_l_var = 2; // this is what was in the original tcp_input.c
+enum tcp_input_consts {
+    tcprexmtthresh = 3,
+    V_drop_synfin = 0,
+    V_tcp_do_ecn = 0,
+    V_tcp_do_rfc3042 = 0,
+    tcp_fast_finwait2_recycle = 0,
+    V_path_mtu_discovery = 0,
+    V_tcp_delack_enabled = 1,
+    V_tcp_initcwnd_segments = 0,
+    V_tcp_do_rfc3390 = 0,
+    V_tcp_abc_l_var = 2 // this is what was in the original tcp_input.c
+};
 
 // Copied from sys/libkern.h
 static int imax(int a, int b) { return (a > b ? a : b); }

@@ -42,24 +42,36 @@
 #include "lbuf.h"
 
 /* EXTERN DECLARATIONS FROM TCP_TIMER.H */ 
+#if 0 // I put these in the enum below
 int tcp_keepinit;		/* time to establish connection */
 int tcp_keepidle;		/* time before keepalive probes begin */
 int tcp_keepintvl;		/* time between keepalive probes */
 //int tcp_keepcnt;			/* number of keepalives */
 int tcp_delacktime;		/* time before sending a delayed ACK */
 int tcp_maxpersistidle;
-int tcp_rexmit_min;
 int tcp_rexmit_slop;
 int tcp_msl;
 //int tcp_ttl;			/* time to live for TCP segs */
 int tcp_finwait2_timeout;
+#endif
+int tcp_rexmit_min;
 
-const int V_tcp_do_rfc1323 = 1;
-const int V_tcp_v6mssdflt = FRAGLIMIT_6LOWPAN - sizeof(struct ip6_hdr) - sizeof(struct tcphdr);
-/* Normally, this is used to prevent DoS attacks by sending tiny MSS values in the options. */
-const int V_tcp_minmss = 70; // Barely enough for TCP header and all options. Default is 216.
-
-extern const int V_tcp_do_sack;
+enum tcp_subr_consts {
+    tcp_delacktime = TCPTV_DELACK,
+	tcp_keepinit = TCPTV_KEEP_INIT,
+	tcp_keepidle = TCPTV_KEEP_IDLE,
+	tcp_keepintvl = TCPTV_KEEPINTVL,
+	tcp_maxpersistidle = TCPTV_KEEP_IDLE,
+	tcp_msl = TCPTV_MSL,
+	tcp_rexmit_slop = TCPTV_CPU_VAR,
+	tcp_finwait2_timeout = TCPTV_FINWAIT2_TIMEOUT,
+	
+    V_tcp_do_rfc1323 = 1,
+    V_tcp_v6mssdflt = FRAGLIMIT_6LOWPAN - sizeof(struct ip6_hdr) - sizeof(struct tcphdr),
+    /* Normally, this is used to prevent DoS attacks by sending tiny MSS values in the options. */
+    V_tcp_minmss = 70, // Barely enough for TCP header and all options. Default is 216.
+    V_tcp_do_sack = 1
+};
 
 // A simple linear congruential number generator
 tcp_seq seed = (tcp_seq) 0xbeaddeed; 
@@ -151,17 +163,22 @@ void tcp_init(void) {
 	tcp_reass_global_init();
 #endif
 	/* XXX virtualize those bellow? */
+
+#if 0 // To save memory, I put these in an enum, defined above	
 	tcp_delacktime = TCPTV_DELACK;
 	tcp_keepinit = TCPTV_KEEP_INIT;
 	tcp_keepidle = TCPTV_KEEP_IDLE;
 	tcp_keepintvl = TCPTV_KEEPINTVL;
 	tcp_maxpersistidle = TCPTV_KEEP_IDLE;
 	tcp_msl = TCPTV_MSL;
+#endif
 	tcp_rexmit_min = TCPTV_MIN;
 	if (tcp_rexmit_min < 1)
 		tcp_rexmit_min = 1;
+#if 0
 	tcp_rexmit_slop = TCPTV_CPU_VAR;
 	tcp_finwait2_timeout = TCPTV_FINWAIT2_TIMEOUT;
+#endif
 	//tcp_tcbhashsize = hashsize;
 
 #if 0 // Ignoring this for now (may bring it back later if necessary)

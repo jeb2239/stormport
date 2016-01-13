@@ -154,7 +154,9 @@ SYSCTL_INT(_net_inet_tcp_sack, OID_AUTO, globalholes, CTLFLAG_VNET | CTLFLAG_RD,
 #include "tcp_var.h"
 #include "sys/queue.h"
 
-const int V_tcp_sack_maxholes = MAX_SACKHOLES;
+enum tcp_sack_consts {
+    V_tcp_sack_maxholes = MAX_SACKHOLES
+};
 /* Don't need these constants, since I have an explicit pool. */
 #if 0
 const int V_tcp_sack_globalmaxholes = 65536;
