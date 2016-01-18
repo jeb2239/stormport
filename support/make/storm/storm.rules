@@ -81,6 +81,15 @@ else
 	@cp $(TOSMAKE_BUILD_DIR)/main.sdb $(TOSMAKE_BUILD_DIR)/expected.sdb
 endif
 
+programall: pack_sdb FORCE
+ifeq ("$(SLOADER)","")
+	@echo -e "$(FAIL_STRING) Cannot program - stormloader is not installed"
+else
+	@echo -e "$(INFO_STRING) Flashing using stormloader"
+	@sload flashalldelta $(TOSMAKE_BUILD_DIR)/expected.sdb $(TOSMAKE_BUILD_DIR)/main.sdb
+	@cp $(TOSMAKE_BUILD_DIR)/main.sdb $(TOSMAKE_BUILD_DIR)/expected.sdb
+endif
+
 TOSMAKE_ADDITIONAL_INPUTS += $(TINYOS_OS_DIR)/platforms/$(PLATFORM)/stormcrt1.c
 
 LINKERFILE ?= stormkernel.ld
