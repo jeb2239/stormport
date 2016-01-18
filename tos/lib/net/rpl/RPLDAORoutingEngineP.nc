@@ -60,7 +60,7 @@ generic module RPLDAORoutingEngineP() {
   }
 } implementation {
 
-#define INIT_DAO 10000
+#define INIT_DAO 300000 // Hyung-Sin modification // 10000
 
   uint8_t dao_double_count = 0;
   uint8_t dao_double_limit = 6;
@@ -364,6 +364,7 @@ generic module RPLDAORoutingEngineP() {
       if (memcmp_rpl((uint8_t*)entry->next_hop.s6_addr,
                      (uint8_t*)iph->ip6_src.s6_addr, 16) == TRUE) {
         // same old destination with same DTSN
+        new_key = entry->key; // Hyung-Sin modification
       } else {
         // new next hop for an existing downswards node
         call RPLRouteInfo.setDTSN((call RPLRouteInfo.getDTSN()) + 1);

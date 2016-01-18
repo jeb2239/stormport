@@ -320,7 +320,6 @@ enum {
   RPL_DEFAULT_INSTANCE = 0,
   NUMBER_OF_PARENTS = 10,
   DIS_INTERVAL = 3*1024U,
-  //DEFAULT_LIFETIME = 1024L * 60 * 20, // 20 mins
   DEFAULT_LIFETIME = 0xFF, // all ones for now
 };
 

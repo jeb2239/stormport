@@ -76,7 +76,7 @@ typedef enum {
 #ifndef MAX_LPL_CCA_CHECKS
 
 #if defined(PLATFORM_TELOSB) || defined(PLATFORM_TMOTE)
-#define MAX_LPL_CCA_CHECKS 400
+#define MAX_LPL_CCA_CHECKS 115 // Hyung-Sin modification // 400
 #else
 #define MAX_LPL_CCA_CHECKS 400
 #endif

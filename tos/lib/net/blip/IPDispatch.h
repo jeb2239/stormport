@@ -26,7 +26,7 @@
 
 enum {
   N_RECONSTRUCTIONS = 3,        /* number of concurrent reconstructions */
-  N_CONCURRENT_SENDS = 3,       /* number of concurrent sends */
+  N_CONCURRENT_SENDS = 12,       /* number of concurrent sends */
   N_FRAGMENTS = 12,             /* number of link-layer fragments to buffer */
 };
 
