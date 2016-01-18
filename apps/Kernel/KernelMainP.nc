@@ -52,6 +52,10 @@ module KernelMainP
     {
         interface Boot;
         interface SplitControl as RadioControl;
+#ifndef NO_RPL
+        interface StdControl as RPLControl;
+        interface RootControl;
+#endif
         interface FlashAttr;
         interface Timer<T32khz> as Timer;
         interface UartStream;
@@ -188,6 +192,11 @@ implementation
 
 #ifdef RPL_SINGLE_HOP_ROOT
         call Timer.startPeriodic(320000);
+#endif
+
+#ifndef NO_RPL
+        call RootControl.unsetRoot();
+        call RPLControl.start();
 #endif
 
         call ENSEN.makeOutput();

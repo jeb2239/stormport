@@ -49,6 +49,10 @@ implementation
     components LocalIeeeEui64P;
 
     KernelMainP.RadioControl ->  IPStackC;
+#ifndef NO_RPL
+    KernelMainP.RPLControl -> RPLRoutingC;
+    KernelMainP.RootControl -> RPLRoutingC;
+#endif
     KernelMainP.NeighborDiscovery ->  IPStackC;
     KernelMainP.SetIPAddress -> IPAddressC;
     KernelMainP.LocalIeeeEui64 -> LocalIeeeEui64P;
