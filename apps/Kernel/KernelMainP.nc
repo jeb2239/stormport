@@ -195,7 +195,11 @@ implementation
 #endif
 
 #ifndef NO_RPL
+#ifdef RPL_SINGLE_HOP_ROOT
+        call RootControl.setRoot();
+#else
         call RootControl.unsetRoot();
+#endif
         call RPLControl.start();
 #endif
 
