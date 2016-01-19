@@ -160,6 +160,7 @@ module TCPDriverP {
     }
     
     event void BSDTCPActiveSocket.receiveReady[uint8_t ai](int gotfin) {
+        activesockets[ai].recvReady.arg0 = (uint8_t) gotfin;
         activesockets[ai].readycbs |= TCP_RECV_READY_CB;
         printf("Receive ready!\n");
     }

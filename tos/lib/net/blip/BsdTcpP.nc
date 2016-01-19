@@ -3,8 +3,8 @@
 #define NUMBSDTCPACTIVESOCKETS uniqueCount(UQ_BSDTCP_ACTIVE)
 #define NUMBSDTCPPASSIVESOCKETS uniqueCount(UQ_BSDTCP_PASSIVE)
 
-#define hz 10 // number of ticks per second
-#define MILLIS_PER_TICK 100 // number of milliseconds per tick
+#define hz 1000 // number of ticks per second
+#define MILLIS_PER_TICK 1 // number of milliseconds per tick
 
 #define FRAGLIMIT_6LOWPAN 127 // Fragmentation limit, excluding IP and TCP headers
 
@@ -18,7 +18,7 @@ module BsdTcpP {
         interface IP;
         interface IPAddress;
         interface Timer<TMilli>[uint8_t timerid];
-        interface Timer<TMilli> as TickTimer;
+        interface LocalTime<TMilli>;
     }
     
 } implementation {
@@ -44,7 +44,7 @@ module BsdTcpP {
 
 #include <bsdtcp/bitmap.c>
 #include <bsdtcp/cbuf.c>
-#include <bsdtcp/lbuf.c>    
+#include <bsdtcp/lbuf.c>
 #include <bsdtcp/tcp_subr.c>
 #include <bsdtcp/tcp_output.c>
 #include <bsdtcp/tcp_input.c>
@@ -58,7 +58,6 @@ module BsdTcpP {
 
     struct tcpcb tcbs[NUMBSDTCPACTIVESOCKETS];
     struct tcpcb_listen tcbls[NUMBSDTCPPASSIVESOCKETS];
-    uint32_t ticks = 0;
     
     event void Boot.booted() {
         int i;
@@ -72,11 +71,6 @@ module BsdTcpP {
             tcbls[i].lport = 0;
             tcbls[i].acceptinto = NULL;
         }
-        call TickTimer.startPeriodic(MILLIS_PER_TICK);
-    }
-    
-    event void TickTimer.fired() {
-        ticks++;
     }
     
     event void Timer.fired[uint8_t timer_id]() {
@@ -331,11 +325,11 @@ module BsdTcpP {
     }
     
     uint32_t get_ticks() {
-        return ticks;
+        return call LocalTime.get();
     }
     
     uint32_t get_millis() {
-        return call TickTimer.getNow();
+        return call LocalTime.get();
     }
     
     void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay) {

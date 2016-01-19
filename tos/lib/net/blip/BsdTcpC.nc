@@ -2,10 +2,9 @@ configuration BsdTcpC {
     provides interface BSDTCPActiveSocket[uint8_t asockid];
     provides interface BSDTCPPassiveSocket[uint8_t psockid];
 } implementation {
-    components MainC, BsdTcpP, IPStackC, IPAddressC;
+    components MainC, BsdTcpP, IPStackC, IPAddressC, LocalTimeMilliC;
     components new TimerMilliC();
-    components new TimerMilliC() as TickTimerMilliC;
-    components new VirtualizeTimerC(TMilli, 16);
+    components new VirtualizeTimerC(TMilli, uniqueCount(UQ_BSDTCP_ACTIVE) << 3);
     
     VirtualizeTimerC.TimerFrom -> TimerMilliC;
     
@@ -13,7 +12,7 @@ configuration BsdTcpC {
     BsdTcpP.IP -> IPStackC.IP[IANA_TCP];
     BsdTcpP.IPAddress -> IPAddressC.IPAddress;
     BsdTcpP.Timer -> VirtualizeTimerC.Timer;
-    BsdTcpP.TickTimer -> TickTimerMilliC;
+    BsdTcpP.LocalTime -> LocalTimeMilliC;
     
     BSDTCPActiveSocket = BsdTcpP.BSDTCPActiveSocket;
     BSDTCPPassiveSocket = BsdTcpP.BSDTCPPassiveSocket;
