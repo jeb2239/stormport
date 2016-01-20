@@ -87,7 +87,7 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 	}
 	if (tp != NULL) {
 		if (!(flags & TH_RST)) {
-			win = cbuf_free_space(tp->recvbuf);
+			win = cbuf_free_space(&tp->recvbuf);
 			if (win > (long)TCP_MAXWIN << tp->rcv_scale)
 				win = (long)TCP_MAXWIN << tp->rcv_scale;
 		}

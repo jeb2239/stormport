@@ -485,7 +485,7 @@ after_sack_rexmit:
 	}
 
 //	recwin = sbspace(&so->so_rcv);
-	recwin = cbuf_free_space(tp->recvbuf);
+	recwin = cbuf_free_space(&tp->recvbuf);
 
 	/*
 	 * Sender silly window avoidance.   We transmit under the following
@@ -582,12 +582,12 @@ after_sack_rexmit:
 
 #if 0 // My window size and max seg size are on different orders of magnitude than what is expected
 		if (adv >= (long)(2 * tp->t_maxseg) &&
-		    (adv >= (long)(/*so->so_rcv.sb_hiwat*/cbuf_size(tp->recvbuf) / 4) ||
-		     recwin <= (long)(/*so->so_rcv.sb_hiwat*/cbuf_size(tp->recvbuf) / 8) ||
-		     /*so->so_rcv.sb_hiwat*/cbuf_size(tp->recvbuf) <= 8 * tp->t_maxseg))
+		    (adv >= (long)(/*so->so_rcv.sb_hiwat*/cbuf_size(&tp->recvbuf) / 4) ||
+		     recwin <= (long)(/*so->so_rcv.sb_hiwat*/cbuf_size(&tp->recvbuf) / 8) ||
+		     /*so->so_rcv.sb_hiwat*/cbuf_size(&tp->recvbuf) <= 8 * tp->t_maxseg))
 			goto send;
 #endif
-		if (adv >= (long) cbuf_size(tp->recvbuf) / 4)
+		if (adv >= (long) cbuf_size(&tp->recvbuf) / 4)
 			goto send;
 	}
 dontupdate:
@@ -1179,7 +1179,7 @@ send:
 	 * Calculate receive window.  Don't shrink window,
 	 * but avoid silly window syndrome.
 	 */
-	if (recwin < (long)(/*so->so_rcv.sb_hiwat*/cbuf_size(tp->recvbuf) / 4) &&
+	if (recwin < (long)(/*so->so_rcv.sb_hiwat*/cbuf_size(&tp->recvbuf) / 4) &&
 	    recwin < (long)tp->t_maxseg)
 		recwin = 0;
 	if (SEQ_GT(tp->rcv_adv, tp->rcv_nxt) &&
@@ -1195,7 +1195,7 @@ send:
 	 */
 	if (flags & TH_SYN)
 		th->th_win = htons((u_short)
-				(min(cbuf_size(tp->recvbuf), TCP_MAXWIN)));
+				(min(cbuf_size(&tp->recvbuf), TCP_MAXWIN)));
 	else
 		th->th_win = htons((u_short)(recwin >> tp->rcv_scale));
 

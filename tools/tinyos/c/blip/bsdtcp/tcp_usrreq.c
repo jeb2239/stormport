@@ -127,7 +127,7 @@ tcp6_connect(struct tcpcb *tp, struct sockaddr_in6 *nam)
 //	struct inpcb *inp = tp->t_inpcb;
 	int error;
 	
-	int sb_max = cbuf_free_space(tp->recvbuf); // same as sendbuf
+	int sb_max = cbuf_free_space(&tp->recvbuf); // same as sendbuf
 //	INP_WLOCK_ASSERT(inp);
 //	INP_HASH_WLOCK(&V_tcbinfo);
 	if (/*inp->inp_lport == 0*/tp->lport == 0) {

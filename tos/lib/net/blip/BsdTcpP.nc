@@ -63,7 +63,8 @@ module BsdTcpP {
         int i;
         tcp_init();
         for (i = 0; i < NUMBSDTCPACTIVESOCKETS; i++) {
-            initialize_tcb(&tcbs[i], 0, i);
+            tcbs[i].index = i;
+            initialize_tcb(&tcbs[i], 0, NULL, 0, NULL);
         }
         for (i = 0; i < NUMBSDTCPPASSIVESOCKETS; i++) {
             tcbls[i].t_state = TCPS_CLOSED;
@@ -243,23 +244,23 @@ module BsdTcpP {
         return EADDRINUSE;
     }
     
-    command error_t BSDTCPPassiveSocket.listenaccept[uint8_t psockid](int asockid) {
+    command error_t BSDTCPPassiveSocket.listenaccept[uint8_t psockid](int asockid, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp) {
         tcbls[psockid].t_state = TCPS_LISTEN;
         if (tcbs[asockid].t_state != TCPS_CLOSED) {
             tcbls[psockid].t_state = TCPS_CLOSED;
             return EISCONN;
         }
-        initialize_tcb(&tcbs[asockid], tcbs[asockid].lport, tcbs[asockid].index);
+        initialize_tcb(&tcbs[asockid], tcbs[asockid].lport, recvbuf, recvbuflen, reassbmp);
         tcbls[psockid].acceptinto = &tcbs[asockid];
         return SUCCESS;
     }
     
-    command error_t BSDTCPActiveSocket.connect[uint8_t asockid](struct sockaddr_in6* addr) {
+    command error_t BSDTCPActiveSocket.connect[uint8_t asockid](struct sockaddr_in6* addr, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp) {
         struct tcpcb* tp = &tcbs[asockid];
         if (tp->t_state != TCPS_CLOSED) { // This is a check that I added
             return (EISCONN);
         }
-        initialize_tcb(tp, tp->lport, tp->index);
+        initialize_tcb(tp, tp->lport, recvbuf, recvbuflen, reassbmp);
         return tcp6_usr_connect(tp, addr);
     }
     
@@ -270,14 +271,14 @@ module BsdTcpP {
     
     command error_t BSDTCPActiveSocket.receive[uint8_t asockid](uint8_t* buffer, uint32_t len, size_t* bytessent) {
         struct tcpcb* tp = &tcbs[asockid];
-        *bytessent = cbuf_read(tp->recvbuf, buffer, len, 1);
+        *bytessent = cbuf_read(&tp->recvbuf, buffer, len, 1);
         return (error_t) tcp_usr_rcvd(tp);
     }
     
     command error_t BSDTCPActiveSocket.shutdown[uint8_t asockid](bool shut_rd, bool shut_wr) {
         int error = SUCCESS;
         if (shut_rd) {
-            cbuf_pop(tcbs[asockid].recvbuf, cbuf_used_space(tcbs[asockid].recvbuf)); // remove all data from the cbuf
+            cbuf_pop(&tcbs[asockid].recvbuf, cbuf_used_space(&tcbs[asockid].recvbuf)); // remove all data from the cbuf
             tpcantrcvmore(&tcbs[asockid]);
         }
         if (shut_wr) {

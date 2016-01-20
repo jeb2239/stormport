@@ -1381,7 +1381,7 @@ relocked:
 		tp->snd_max = tp->iss/* + 1*/;
 		tp->snd_nxt = tp->iss/* + 1*/;
 		tp->rcv_up = th->th_seq + 1;
-		tp->rcv_wnd = imin(imax(cbuf_free_space(tp->recvbuf), 0), TCP_MAXWIN);
+		tp->rcv_wnd = imin(imax(cbuf_free_space(&tp->recvbuf), 0), TCP_MAXWIN);
 		tp->rcv_adv += tp->rcv_wnd;
 		tp->last_ack_sent = tp->rcv_nxt;
 		memcpy(&tp->faddr, &ip6->ip6_src, sizeof(tp->faddr));
@@ -1774,7 +1774,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	    tiwin && tiwin == tp->snd_wnd && 
 	    ((tp->t_flags & (TF_NEEDSYN|TF_NEEDFIN)) == 0) &&
 	    /*LIST_EMPTY(&tp->t_segq) &&*/
-	    bmp_isempty(tp->reassbmp, REASSBMP_SIZE) && // Added by Sam
+	    bmp_isempty(tp->reassbmp, REASSBMP_SIZE(tp)) && // Added by Sam
 	    ((to.to_flags & TOF_TS) == 0 ||
 	     TSTMP_GEQ(to.to_tsval, tp->ts_recent)) ) {
 
@@ -1907,7 +1907,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				goto check_delack;
 			}
 		} else if (th->th_ack == tp->snd_una &&
-		    tlen <= /*sbspace(&so->so_rcv)*/cbuf_free_space(tp->recvbuf)) {
+		    tlen <= /*sbspace(&so->so_rcv)*/cbuf_free_space(&tp->recvbuf)) {
 			int newsize = 0;	/* automatic sockbuf scaling */
 
 			/*
@@ -2025,8 +2025,8 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
        	  thing I could do to trimming an mbuf). */
 //				sbappendstream_locked(&so->so_rcv, m, 0);
 			if (!(tp->bufstate & TCB_CANTRCVMORE)) {
-				size_t usedbefore = cbuf_used_space(tp->recvbuf);
-				cbuf_write(tp->recvbuf, ((uint8_t*) th) + drop_hdrlen, tlen);
+				size_t usedbefore = cbuf_used_space(&tp->recvbuf);
+				cbuf_write(&tp->recvbuf, ((uint8_t*) th) + drop_hdrlen, tlen);
 				if (usedbefore == 0 && tlen > 0) {
 					*signals |= SIG_RECVBUF_NOTEMPTY;
 				}
@@ -2051,7 +2051,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	 * but not less than advertised window.
 	 */
 //	win = sbspace(&so->so_rcv);
-	win = cbuf_free_space(tp->recvbuf);
+	win = cbuf_free_space(&tp->recvbuf);
 	if (win < 0)
 		win = 0;
 	tp->rcv_wnd = imax(win, (int)(tp->rcv_adv - tp->rcv_nxt));
@@ -3115,7 +3115,7 @@ dodata:							/* XXX */
 		 */
 		if (th->th_seq == tp->rcv_nxt &&
 		    /*LIST_EMPTY(&tp->t_segq) &&*/
-		    bmp_isempty(tp->reassbmp, REASSBMP_SIZE) && // Added by Sam
+		    ((tp->bufstate & TCB_CANTRCVMORE) || bmp_isempty(tp->reassbmp, REASSBMP_SIZE(tp))) && // Added by Sam
 		    TCPS_HAVEESTABLISHED(tp->t_state)) {
 			if (DELAY_ACK(tp, tlen))
 				tp->t_flags |= TF_DELACK;
@@ -3133,15 +3133,25 @@ dodata:							/* XXX */
 */
 				//sbappendstream_locked(&so->so_rcv, m, 0);
 			if (!(tp->bufstate & TCB_CANTRCVMORE)) {
-				size_t usedbefore = cbuf_used_space(tp->recvbuf);
-				cbuf_write(tp->recvbuf, ((uint8_t*) th) + drop_hdrlen, tlen);
+				size_t usedbefore = cbuf_used_space(&tp->recvbuf);
+				cbuf_write(&tp->recvbuf, ((uint8_t*) th) + drop_hdrlen, tlen);
 				if (usedbefore == 0 && tlen > 0) {
 					*signals |= SIG_RECVBUF_NOTEMPTY;
 				}
 			}
 			/* NB: sorwakeup_locked() does an implicit unlock. */
 //			sorwakeup_locked(so);
-		} else {
+		} else if (tp->bufstate & TCB_CANTRCVMORE) {
+		    /*
+	         * Added by Sam: If we can't receive more, then the reassembly queue is invalid. So,
+	         * we can't reassemble any out-of-order segments. Furthermore, we know that if we
+	         * ended up in this part of the code when we can't receive more, it's because this
+	         * segment is NOT contiguous with other received data. So, we just do nothing in this
+	         * case.
+	         */
+	        tlen = 0; // Don't update SACK state
+            thflags = 0;
+	    } else {
 			/*
 			 * XXX: Due to the header drop above "th" is
 			 * theoretically invalid by now.  Fortunately

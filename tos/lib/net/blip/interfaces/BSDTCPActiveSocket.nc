@@ -6,7 +6,7 @@ interface BSDTCPActiveSocket {
 
     command error_t bind(uint16_t port);
     
-    command error_t connect(struct sockaddr_in6* addr);
+    command error_t connect(struct sockaddr_in6* addr, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
     event void connectDone(struct sockaddr_in6* addr);
     
     event void sendDone(uint32_t freedentries);

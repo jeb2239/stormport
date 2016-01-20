@@ -181,7 +181,7 @@ module TCPDriverP {
         return EBADF;
     }
     
-    default command error_t BSDTCPPassiveSocket.listenaccept[uint8_t pundef] (int activesockid) {
+    default command error_t BSDTCPPassiveSocket.listenaccept[uint8_t pundef] (int activesockid, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp) {
         return EBADF;
     }
     
@@ -205,7 +205,7 @@ module TCPDriverP {
         return TCPS_CLOSED; // BE CAREFUL
     }
     
-    default command error_t BSDTCPActiveSocket.connect[uint8_t aundef](struct sockaddr_in6* addr) {
+    default command error_t BSDTCPActiveSocket.connect[uint8_t aundef](struct sockaddr_in6* addr, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp) {
         return EBADF;
     }
     
@@ -311,6 +311,7 @@ module TCPDriverP {
         uint8_t* buffer;
         int fd;
         int afd;
+        int afd_id;
         int state;
         size_t length;
         uint32_t svc_id;
@@ -337,7 +338,7 @@ module TCPDriverP {
                     printf("Bound active socket to port %d\n", arg1);
                 }
                 break;
-            case 0x03: // connect(fd, faddr, fport)
+            case 0x03: // connect(fd, faddr, fport, recvbuf, recvbuflen, reassbuf)
                 if (fd < 0 || passive) {
                     break;
                 }
@@ -347,9 +348,9 @@ module TCPDriverP {
                 }
                 inet_pton6((char*) arg1, &addr.sin6_addr);
                 addr.sin6_port = htons((uint16_t) arg2);
-                rv = (syscall_rv_t) call BSDTCPActiveSocket.connect[fd](&addr);
+                rv = (syscall_rv_t) call BSDTCPActiveSocket.connect[fd](&addr, (uint8_t*) argx[0], (size_t) argx[1], (uint8_t*) argx[2]);
                 break;
-            case 0x04: // listenaccept(fd)
+            case 0x04: // listenaccept(fd, recvbuf, recvbuflen, reassbuf)
                 if (fd < 0 || !passive) {
                     break;
                 }
@@ -359,7 +360,8 @@ module TCPDriverP {
                     break;
                 }
                 passivesockets[fd].acceptinginto = afd;
-                rv = (syscall_rv_t) call BSDTCPPassiveSocket.listenaccept[fd](call BSDTCPActiveSocket.getID[afd]());
+                afd_id = call BSDTCPActiveSocket.getID[afd]();
+                rv = (syscall_rv_t) call BSDTCPPassiveSocket.listenaccept[fd](afd_id, (uint8_t*) arg1, (size_t) arg2, (uint8_t*) argx[0]);
                 printf("Accepting into socket %d\n", afd);
                 break;
             case 0x05: // send(fd, data, status)
@@ -400,10 +402,14 @@ module TCPDriverP {
                 }
                 break;
             case 0x09: // abort(fd)
-                if (fd < 0 || passive) {
+                if (fd < 0) {
                     break;
                 }
-                rv = (syscall_rv_t) call BSDTCPActiveSocket.abort[fd]();
+                if (passive) {
+                    rv = (syscall_rv_t) call BSDTCPPassiveSocket.close[fd]();
+                } else {
+                    rv = (syscall_rv_t) call BSDTCPActiveSocket.abort[fd]();
+                }
                 break;
             case 0x0a: // set_connectDone_cb(fd, cb, r)
                 if (fd < 0 || passive) {

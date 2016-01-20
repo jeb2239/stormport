@@ -107,9 +107,7 @@ struct tcpcb_listen {
 #define tpcantrcvmore(tp) (tp)->bufstate |= TCB_CANTRCVMORE
 #define tpcantsendmore(tp) (tp)->bufstate |= TCB_CANTSENDMORE
 
-#define CBUF_OVERHEAD 12
-#define RECVBUF_SIZE 185
-#define REASSBMP_SIZE BITS_TO_BYTES(RECVBUF_SIZE - CBUF_OVERHEAD)
+#define REASSBMP_SIZE(tp) BITS_TO_BYTES((tp)->recvbuf.size)
 
 /* These estimates are used to allocate sackholes (see tcp_sack.c). */
 #define AVG_SACKHOLES 4 // per TCB
@@ -134,8 +132,8 @@ struct tcpcb {
 	uint8_t bufstate;
 	
 	struct lbufhead sendbuf;
-	uint8_t recvbuf[RECVBUF_SIZE];
-	uint8_t reassbmp[REASSBMP_SIZE];
+	struct cbufhead recvbuf;
+	uint8_t* reassbmp;
 	int16_t reass_fin_index;
 	
 	uint16_t lport; // local port, network byte order
@@ -289,7 +287,7 @@ struct tcpcb {
 };
 
 /* Defined in tcp_subr.c. */
-void initialize_tcb(struct tcpcb* tp, uint16_t port, int index);
+void initialize_tcb(struct tcpcb* tp, uint16_t lport, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
 
 /*
  * Flags and utility macros for the t_flags field.

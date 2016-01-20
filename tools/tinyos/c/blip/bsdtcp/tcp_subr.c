@@ -234,15 +234,16 @@ tcp_state_change(struct tcpcb *tp, int newstate)
 #endif
 }
 
- /* This is based on tcp_newtcb in tcp_subr.c, and tcp_usr_attach in tcp_usrreq.c. */
-void initialize_tcb(struct tcpcb* tp, uint16_t lport, int index) {
+ /* This is based on tcp_newtcb in tcp_subr.c, and tcp_usr_attach in tcp_usrreq.c.
+    The length of the reassembly bitmap is fixed at ceil(0.125 * recvbuflen). */
+void initialize_tcb(struct tcpcb* tp, uint16_t lport, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp) {
 	uint32_t ticks = get_ticks();
+	int initindex = tp->index;
 	
     memset(tp, 0x00, sizeof(struct tcpcb));
-    bmp_init(tp->reassbmp, REASSBMP_SIZE);
     tp->reass_fin_index = -1;
     tp->lport = lport;
-    tp->index = index;
+    tp->index = initindex;
     // Congestion control algorithm. For now, don't include it.
     CC_ALGO(tp) = CC_DEFAULT();
     tp->ccv = &tp->ccvdata;
@@ -278,8 +279,10 @@ void initialize_tcb(struct tcpcb* tp, uint16_t lport, int index) {
 	tp->t_state = TCP6S_CLOSED;
 	
 	lbuf_init(&tp->sendbuf);
-	if (cbuf_init(tp->recvbuf, RECVBUF_SIZE) != 0) {
-		printf("TCP receive buffer too small!\n");
+	if (recvbuf) {
+	    cbuf_init(&tp->recvbuf, recvbuf, recvbuflen);
+	    tp->reassbmp = reassbmp;
+	    bmp_init(tp->reassbmp, BITS_TO_BYTES(recvbuflen));
 	}
 }
 
@@ -587,7 +590,7 @@ tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
 	}
 	if (tp != NULL) {
 		if (!(flags & TH_RST)) {
-			win = cbuf_free_space(tp->recvbuf);
+			win = cbuf_free_space(&tp->recvbuf);
 			if (win > (long)TCP_MAXWIN << tp->rcv_scale)
 				win = (long)TCP_MAXWIN << tp->rcv_scale;
 		}
