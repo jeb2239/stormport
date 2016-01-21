@@ -92,7 +92,9 @@ struct cc_algo newreno_cc_algo = {
 struct cc_algo* V_default_cc_ptr = &newreno_cc_algo;
 
 // Constant that is referenced (may want to change this later)
-const int V_tcp_do_rfc3465 = 1;
+enum {
+    V_tcp_do_rfc3465 = 1
+};
 
 static void
 newreno_ack_received(struct cc_var *ccv, uint16_t type)

@@ -4,7 +4,7 @@ configuration BsdTcpC {
 } implementation {
     components MainC, BsdTcpP, IPStackC, IPAddressC, LocalTimeMilliC;
     components new TimerMilliC();
-    components new VirtualizeTimerC(TMilli, uniqueCount(UQ_BSDTCP_ACTIVE) << 3);
+    components new VirtualizeTimerC(TMilli, uniqueCount(UQ_BSDTCP_ACTIVE) << 2);
     
     VirtualizeTimerC.TimerFrom -> TimerMilliC;
     

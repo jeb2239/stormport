@@ -82,21 +82,22 @@ module BsdTcpP {
         }
         printf("Timer %d fired!\n", timer_id);
         
-        tp = &tcbs[timer_id >> 3];
-        timer_id &= 0x7;
+        tp = &tcbs[timer_id >> 2];
+        timer_id &= 0x3;
         
         switch(timer_id) {
         case TOS_DELACK:
             printf("Delayed ACK\n");
             tcp_timer_delack(tp);
             break;
-        case TOS_REXMT:
-            printf("Retransmit\n");
-            tcp_timer_rexmt(tp);
-            break;
-        case TOS_PERSIST:
-            printf("Persist\n");
-            tcp_timer_persist(tp);
+        case TOS_REXMT: // Also includes persist case
+            if (tp->activetimers & TT_REXMT) {
+                printf("Retransmit\n");
+                tcp_timer_rexmt(tp);
+            } else {
+                printf("Persist\n");
+                tcp_timer_persist(tp);
+            }
             break;
         case TOS_KEEP:
             printf("Keep\n");
@@ -335,8 +336,8 @@ module BsdTcpP {
     
     void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay) {
         uint8_t tcb_index = (uint8_t) tcb->index;
-        uint8_t timer_index = (tcb_index << 3) | timer_id;
-        if (timer_id > 0x7) {
+        uint8_t timer_index = (tcb_index << 2) | timer_id;
+        if (timer_id > 0x3) {
             printf("WARNING: setting out of bounds timer!\n");
         }
         printf("Setting timer %d, delay is %d\n", timer_index, delay * MILLIS_PER_TICK);
@@ -345,8 +346,8 @@ module BsdTcpP {
     
     void stop_timer(struct tcpcb* tcb, uint8_t timer_id) {
         uint8_t tcb_index = (uint8_t) tcb->index;
-        uint8_t timer_index = (tcb_index << 3) | timer_id;
-        if (timer_id > 0x7) {
+        uint8_t timer_index = (tcb_index << 2) | timer_id;
+        if (timer_id > 0x3) {
             printf("WARNING: stopping out of bounds timer!\n");
         }
         printf("Stopping timer %d\n", timer_index);
