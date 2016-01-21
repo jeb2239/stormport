@@ -454,7 +454,7 @@ tcp_dropwithreset(struct ip6_hdr* ip6, struct tcphdr *th, struct tcpcb *tp,
 	else
 #endif
 #ifdef INET
-	{x
+	{
 		ip = mtod(m, struct ip *);
 		if (IN_MULTICAST(ntohl(ip->ip_dst.s_addr)) ||
 		    IN_MULTICAST(ntohl(ip->ip_src.s_addr)) ||
@@ -2030,6 +2030,12 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				if (usedbefore == 0 && tlen > 0) {
 					*signals |= SIG_RECVBUF_NOTEMPTY;
 				}
+			} else {
+				/* Sam: We already know tlen != 0, so if we got here, then it means
+				   that we got data after we called SHUT_RD, or after receiving a FIN.
+				   I'm going to drop the connection in this case. */
+				tcp_drop(tp, ECONNABORTED);
+				goto drop;
 			}
 //			}
 			/* NB: sorwakeup_locked() does an implicit unlock. */
@@ -3138,19 +3144,21 @@ dodata:							/* XXX */
 				if (usedbefore == 0 && tlen > 0) {
 					*signals |= SIG_RECVBUF_NOTEMPTY;
 				}
+			} else if (tlen > 0) {
+				/* Sam: We already know tlen != 0, so if we got here, then it means
+				   that we got data after we called SHUT_RD, or after receiving a FIN.
+				   I'm going to drop the connection in this case. */
+				tcp_drop(tp, ECONNABORTED);
+				goto drop;
 			}
 			/* NB: sorwakeup_locked() does an implicit unlock. */
 //			sorwakeup_locked(so);
 		} else if (tpiscantrcv(tp)) {
-		    /*
-	         * Added by Sam: If we can't receive more, then the reassembly queue is invalid. So,
-	         * we can't reassemble any out-of-order segments. Furthermore, we know that if we
-	         * ended up in this part of the code when we can't receive more, it's because this
-	         * segment is NOT contiguous with other received data. So, we just do nothing in this
-	         * case.
-	         */
-	        tlen = 0; // Don't update SACK state
-            thflags = 0;
+		    /* Sam: We will reach this point if we get out-of-order data on a socket which was
+		       shut down with SHUT_RD, or where we already received a FIN. My response here is
+		       to drop the segment and send an RST. */
+			tcp_drop(tp, ECONNABORTED);
+			goto drop;
 	    } else {
 			/*
 			 * XXX: Due to the header drop above "th" is

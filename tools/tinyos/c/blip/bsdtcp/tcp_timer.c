@@ -360,8 +360,8 @@ tcp_timer_2msl(struct tcpcb* tp)
 		   tcbtw structs are closed and freed.
 		   
 		   Instead, I keep the socket around, so I just use this timer to do it. */
-		   tp = tcp_close(tp);
-		   connection_lost(tp, CONN_LOST_NORMAL);
+		tp = tcp_close(tp);
+		connection_lost(tp, CONN_LOST_NORMAL);
 	} else {
 		if (ticks - tp->t_rcvtime <= TP_MAXIDLE(tp)) {
 		/*
@@ -371,10 +371,11 @@ tcp_timer_2msl(struct tcpcb* tp)
 			}
 		*/
 			set_timer(tp, TOS_2MSL, TP_KEEPINTVL(tp));
-		} else
-		       tp = tcp_close(tp);
-		       connection_lost(tp, CONN_LOST_NORMAL);
-       }
+		} else {
+			tp = tcp_close(tp);
+			connection_lost(tp, CONN_LOST_NORMAL);
+		}
+    }
 #if 0
 #ifdef TCPDEBUG
 	if (tp != NULL && (tp->t_inpcb->inp_socket->so_options & SO_DEBUG))
@@ -700,10 +701,15 @@ tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta) {
 
 void
 tcp_cancel_timers(struct tcpcb* tp) {
+	tpcleartimeractive(tp, TOS_DELACK);
 	stop_timer(tp, TOS_DELACK);
-    stop_timer(tp, TOS_REXMT);
-    stop_timer(tp, TOS_PERSIST);
-    stop_timer(tp, TOS_KEEP);
-    stop_timer(tp, TOS_2MSL);
+	tpcleartimeractive(tp, TOS_REXMT);
+	stop_timer(tp, TOS_REXMT);
+	tpcleartimeractive(tp, TOS_PERSIST);
+	stop_timer(tp, TOS_PERSIST);
+	tpcleartimeractive(tp, TOS_KEEP);
+	stop_timer(tp, TOS_KEEP);
+	tpcleartimeractive(tp, TOS_2MSL);
+	stop_timer(tp, TOS_2MSL);
 }
 
