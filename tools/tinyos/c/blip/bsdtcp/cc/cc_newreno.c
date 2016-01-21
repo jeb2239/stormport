@@ -80,7 +80,7 @@ static void	newreno_after_idle(struct cc_var *ccv);
 static void	newreno_cong_signal(struct cc_var *ccv, uint32_t type);
 static void	newreno_post_recovery(struct cc_var *ccv);
 
-struct cc_algo newreno_cc_algo = {
+const struct cc_algo newreno_cc_algo = {
 	.name = "newreno",
 	.ack_received = newreno_ack_received,
 	.after_idle = newreno_after_idle,
@@ -88,8 +88,10 @@ struct cc_algo newreno_cc_algo = {
 	.post_recovery = newreno_post_recovery,
 };
 
+#if 0
 // Normally, this is done in cc.c, but this is the only line from that file that I need.
 struct cc_algo* V_default_cc_ptr = &newreno_cc_algo;
+#endif
 
 // Constant that is referenced (may want to change this later)
 enum {

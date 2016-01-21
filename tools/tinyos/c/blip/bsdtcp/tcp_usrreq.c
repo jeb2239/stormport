@@ -294,7 +294,7 @@ static int tcp_usr_send(struct tcpcb* tp, int moretocome, struct lbufent* data, 
 		goto out;
 	}
 	
-	if (tp->bufstate & TCB_CANTSENDMORE) {
+	if (tpiscantsend(tp)) {
 		error = ESHUTDOWN;
 		goto out;
 	}

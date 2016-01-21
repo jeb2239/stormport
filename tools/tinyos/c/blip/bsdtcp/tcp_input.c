@@ -1371,7 +1371,7 @@ relocked:
 		// CODE IS TAKEN FROM THE syncache_socket FUNCTION
 		tp = tpl->acceptinto;
 		tcp_state_change(tp, TCPS_SYN_RECEIVED);
-		tp->passiveopen = TRUE;
+		tpmarkpassiveopen(tp);
 		tp->t_flags |= TF_ACKNOW; // my addition
 		tp->iss = tcp_new_isn(tp);
 		tp->irs = th->th_seq;
@@ -2024,7 +2024,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
        	  rather than adding it to the th pointer (which would be the closest
        	  thing I could do to trimming an mbuf). */
 //				sbappendstream_locked(&so->so_rcv, m, 0);
-			if (!(tp->bufstate & TCB_CANTRCVMORE)) {
+			if (!tpiscantrcv(tp)) {
 				size_t usedbefore = cbuf_used_space(&tp->recvbuf);
 				cbuf_write(&tp->recvbuf, ((uint8_t*) th) + drop_hdrlen, tlen);
 				if (usedbefore == 0 && tlen > 0) {
@@ -2549,7 +2549,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 //			    mtod(m, const char *), tp, th);
 			cc_conn_init(tp);
 			tcp_timer_activate(tp, TT_KEEP, TP_KEEPIDLE(tp));
-			if (!tp->passiveopen) { // Added by Sam: Accounts for simultaneous open
+			if (!tpispassiveopen(tp)) { // Added by Sam: Accounts for simultaneous open
 				// If this socket was opened actively, then the fact we are in SYN-RECEIVED indicates a simultaneous open
 				// Don't ACK the SYN-ACK, in that case (unless it contains data or something, which will be processed later)
 				tp->t_flags &= ~TF_ACKNOW;
@@ -2950,7 +2950,7 @@ process_ACK:
 				 * compressed state.
 				 */
 				if (/*so->so_rcv.sb_state & SBS_CANTRCVMORE*/
-				    tp->bufstate & TCB_CANTRCVMORE) {
+				    tpiscantrcv(tp)) {
 //					soisdisconnected(so);
 					tcp_timer_activate(tp, TT_2MSL,
 					    (tcp_fast_finwait2_recycle ?
@@ -3115,7 +3115,7 @@ dodata:							/* XXX */
 		 */
 		if (th->th_seq == tp->rcv_nxt &&
 		    /*LIST_EMPTY(&tp->t_segq) &&*/
-		    ((tp->bufstate & TCB_CANTRCVMORE) || bmp_isempty(tp->reassbmp, REASSBMP_SIZE(tp))) && // Added by Sam
+		    (tpiscantrcv(tp) || bmp_isempty(tp->reassbmp, REASSBMP_SIZE(tp))) && // Added by Sam
 		    TCPS_HAVEESTABLISHED(tp->t_state)) {
 			if (DELAY_ACK(tp, tlen))
 				tp->t_flags |= TF_DELACK;
@@ -3132,7 +3132,7 @@ dodata:							/* XXX */
 			else
 */
 				//sbappendstream_locked(&so->so_rcv, m, 0);
-			if (!(tp->bufstate & TCB_CANTRCVMORE)) {
+			if (!tpiscantrcv(tp)) {
 				size_t usedbefore = cbuf_used_space(&tp->recvbuf);
 				cbuf_write(&tp->recvbuf, ((uint8_t*) th) + drop_hdrlen, tlen);
 				if (usedbefore == 0 && tlen > 0) {
@@ -3141,7 +3141,7 @@ dodata:							/* XXX */
 			}
 			/* NB: sorwakeup_locked() does an implicit unlock. */
 //			sorwakeup_locked(so);
-		} else if (tp->bufstate & TCB_CANTRCVMORE) {
+		} else if (tpiscantrcv(tp)) {
 		    /*
 	         * Added by Sam: If we can't receive more, then the reassembly queue is invalid. So,
 	         * we can't reassemble any out-of-order segments. Furthermore, we know that if we

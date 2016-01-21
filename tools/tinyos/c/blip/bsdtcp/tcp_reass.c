@@ -90,7 +90,7 @@ present:
 	 */
 	mergeable = cbuf_reass_count_set(&tp->recvbuf, 0, tp->reassbmp, (size_t) 0xFFFFFFFF);
 	usedbefore = cbuf_used_space(&tp->recvbuf);
-	if (!(tp->bufstate & TCB_CANTRCVMORE) || usedbefore == 0) {
+	if (!tpiscantrcv(tp) || usedbefore == 0) {
 		/* If usedbefore == 0, but we can't receive more, then we still need to move the buffer
 		   along by merging and then popping, in case we receive a FIN later on. */
 		if (tp->reass_fin_index >= 0 && cbuf_reass_within_offset(&tp->recvbuf, mergeable, (size_t) tp->reass_fin_index)) {
@@ -99,7 +99,7 @@ present:
 		}
 		merged = cbuf_reass_merge(&tp->recvbuf, mergeable, tp->reassbmp);
 		KASSERT(merged == mergeable, ("Reassembly merge out of bounds: tried to merge %d, but merged %d\n", (int) mergeable, (int) merged));
-		if (tp->bufstate & TCB_CANTRCVMORE) {
+		if (tpiscantrcv(tp)) {
 			cbuf_pop(&tp->recvbuf, merged); // So no data really enters the buffer
 		} else if (usedbefore == 0 && merged > 0) {
 			*signals |= SIG_RECVBUF_NOTEMPTY;

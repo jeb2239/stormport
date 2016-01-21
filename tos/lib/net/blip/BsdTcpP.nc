@@ -91,7 +91,7 @@ module BsdTcpP {
             tcp_timer_delack(tp);
             break;
         case TOS_REXMT: // Also includes persist case
-            if (tp->activetimers & TT_REXMT) {
+            if (tpistimeractive(tp, TT_REXMT)) {
                 printf("Retransmit\n");
                 tcp_timer_rexmt(tp);
             } else {
@@ -280,6 +280,8 @@ module BsdTcpP {
         int error = SUCCESS;
         if (shut_rd) {
             cbuf_pop(&tcbs[asockid].recvbuf, cbuf_used_space(&tcbs[asockid].recvbuf)); // remove all data from the cbuf
+            // TODO We need to deal with bytes received out-of-order
+            // Our strategy is to "pretend" that we got those extra bytes and ACK them.
             tpcantrcvmore(&tcbs[asockid]);
         }
         if (shut_wr) {

@@ -1208,7 +1208,7 @@ send:
 	 * the connection.
 	 */
 	if (th->th_win == 0) {
-		tp->t_sndzerowin++;
+//		tp->t_sndzerowin++;
 		tp->t_flags |= TF_RXWIN0SENT;
 	} else
 		tp->t_flags &= ~TF_RXWIN0SENT;

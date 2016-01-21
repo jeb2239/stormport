@@ -52,8 +52,8 @@ enum tcp_timer_consts {
 void
 tcp_timer_delack(/*void *xtp*/struct tcpcb* tp)
 {
-    KASSERT(tp->activetimers & TT_DELACK, ("Delack timer running, but unmarked\n"));
-	tp->activetimers &= ~TT_DELACK;
+    KASSERT(tpistimeractive(tp, TT_DELACK), ("Delack timer running, but unmarked\n"));
+    tpcleartimeractive(tp, TT_DELACK);
 #if 0
 	struct tcpcb *tp = xtp;
 	struct inpcb *inp;
@@ -91,8 +91,8 @@ tcp_timer_keep(struct tcpcb* tp)
 {
     uint32_t ticks = get_ticks();
 	struct tcptemp *t_template;
-	KASSERT(tp->activetimers & TT_KEEP, ("Keep timer running, but unmarked\n"));
-	tp->activetimers &= ~TT_KEEP; // for our own internal bookkeeping
+	KASSERT(tpistimeractive(tp, TT_KEEP), ("Keep timer running, but unmarked\n"));
+	tpcleartimeractive(tp, TT_KEEP); // for our own internal bookkeeping
 #if 0 // I already cancel this invocation if it was rescheduled meanwhile
 	struct inpcb *inp;
 	CURVNET_SET(tp->t_vnet);
@@ -204,8 +204,8 @@ void
 tcp_timer_persist(struct tcpcb* tp)
 {
     uint32_t ticks = get_ticks();
-    KASSERT(tp->activetimers & TT_PERSIST, ("Persist timer running, but unmarked\n"));
-    tp->activetimers &= ~TT_PERSIST; // mark that this timer is no longer active
+    KASSERT(tpistimeractive(tp, TT_PERSIST), ("Persist timer running, but unmarked\n"));
+    tpcleartimeractive(tp, TT_PERSIST); // mark that this timer is no longer active
 #if 0 // I already cancel if a timer was scheduled meanwhile
 	struct inpcb *inp;
 	CURVNET_SET(tp->t_vnet);
@@ -293,8 +293,8 @@ void
 tcp_timer_2msl(struct tcpcb* tp)
 {
 	uint32_t ticks = get_ticks();
-	KASSERT(tp->activetimers & TT_2MSL, ("2MSL timer running, but unmarked\n"));
-	tp->activetimers &= ~TT_2MSL; // for our own bookkeeping
+	KASSERT(tpistimeractive(tp, TT_2MSL), ("2MSL timer running, but unmarked\n"));
+	tpcleartimeractive(tp, TT_2MSL); // for our own bookkeeping
 #if 0
 	struct inpcb *inp;
 	CURVNET_SET(tp->t_vnet);
@@ -397,8 +397,8 @@ tcp_timer_rexmt(struct tcpcb *tp)
 	int rexmt;
 	int headlocked;
 	uint32_t ticks = get_ticks();
-	KASSERT(tp->activetimers & TT_REXMT, ("Rexmt timer running, but unmarked\n"));
-	tp->activetimers &= ~TT_REXMT; // for our own bookkeeping of active timers
+	KASSERT(tpistimeractive(tp, TT_REXMT), ("Rexmt timer running, but unmarked\n"));
+	tpcleartimeractive(tp, TT_REXMT); // for our own bookkeeping of active timers
 //	struct inpcb *inp;
 #if 0
 #ifdef TCPDEBUG
@@ -659,7 +659,7 @@ out:
 int
 tcp_timer_active(struct tcpcb *tp, uint32_t timer_type)
 {
-	return (tp->activetimers & timer_type) != 0;
+	return tpistimeractive(tp, timer_type);
 }
 
 void
@@ -686,14 +686,14 @@ tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta) {
 		return;
 	}
 	if (delta) {
-		tp->activetimers |= timer_type;
-		if ((tp->activetimers & TT_REXMT) && (tp->activetimers & TT_PERSIST)) {
+	    tpmarktimeractive(tp, timer_type);
+		if (tpistimeractive(tp, TT_REXMT) && tpistimeractive(tp, TT_PERSIST)) {
 		    char* msg = "TCP CRITICAL FAILURE: Retransmit and Persist timers are simultaneously running!\n";
 		    storm_write_payload(msg, strlen(msg));
 		}
 		set_timer(tp, tos_timer, (uint32_t) delta);
 	} else {
-		tp->activetimers &= ~timer_type;
+		tpcleartimeractive(tp, timer_type);
 		stop_timer(tp, tos_timer);
 	}
 }

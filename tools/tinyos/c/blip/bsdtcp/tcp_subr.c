@@ -244,10 +244,11 @@ void initialize_tcb(struct tcpcb* tp, uint16_t lport, uint8_t* recvbuf, size_t r
     tp->reass_fin_index = -1;
     tp->lport = lport;
     tp->index = initindex;
-    // Congestion control algorithm. For now, don't include it.
-    CC_ALGO(tp) = CC_DEFAULT();
-    tp->ccv = &tp->ccvdata;
-    tp->ccv->type = IPPROTO_TCP;
+    // Congestion control algorithm.
+    
+    // I only implement New Reno, so I'm not going to waste memory in each socket describing what the congestion algorithm is; it's always New Reno
+//    CC_ALGO(tp) = CC_DEFAULT();
+//    tp->ccv->type = IPPROTO_TCP;
 	tp->ccv->ccvc.tcp = tp;
     
     tp->t_maxseg = tp->t_maxopd =
@@ -297,7 +298,7 @@ tcp_discardcb(struct tcpcb *tp)
 
 //	khelp_destroy_osd(tp->osd);
 
-	CC_ALGO(tp) = NULL;
+//	CC_ALGO(tp) = NULL;
 	
 	tcp_free_sackholes(tp);
 #if 0 // Most of this is not applicable anymore. Above, I've copied the relevant parts.

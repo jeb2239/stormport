@@ -60,7 +60,7 @@
 extern STAILQ_HEAD(cc_head, cc_algo) cc_list;
 extern const int tcprexmtthresh;
 #endif
-extern struct cc_algo newreno_cc_algo;
+extern const struct cc_algo newreno_cc_algo;
 
 #if 0
 /* Per-netstack bits. */
@@ -71,8 +71,10 @@ VNET_DECLARE(struct cc_algo *, default_cc_ptr);
 SYSCTL_DECL(_net_inet_tcp_cc);
 #endif
 
+#if 0
 // Defined in cc/cc_newreno.c
 extern struct cc_algo* V_default_cc_ptr;
+#endif
 
 #if 0
 /* CC housekeeping functions. */
@@ -89,7 +91,7 @@ struct cc_var {
 	int		bytes_this_ack; /* # bytes acked by the current ACK. */
 	tcp_seq		curack; /* Most recent ACK. */
 	uint32_t	flags; /* Flags for cc_var (see below) */
-	int		type; /* Indicates which ptr is valid in ccvc. */
+//	int		type; /* Indicates which ptr is valid in ccvc. */
 	union ccv_container {
 		struct tcpcb		*tcp;
 		struct sctp_nets	*sctp;
@@ -163,13 +165,14 @@ struct cc_algo {
 };
 
 /* Macro to obtain the CC algo's struct ptr. */
-#define	CC_ALGO(tp)	((tp)->cc_algo)
+//#define	CC_ALGO(tp)	((tp)->cc_algo)
+#define CC_ALGO(tp) (&newreno_cc_algo) // This allows the #defines in cc_newreno.c to work as intended
 
 /* Macro to obtain the CC algo's data ptr. */
 #define	CC_DATA(tp)	((tp)->ccv->cc_data)
 
 /* Macro to obtain the system default CC algo's struct ptr. */
-#define	CC_DEFAULT()	V_default_cc_ptr
+//#define	CC_DEFAULT()	V_default_cc_ptr
 
 #if 0
 extern struct rwlock cc_list_lock;

@@ -101,16 +101,25 @@ struct tcpcb_listen {
     struct tcpcb* acceptinto;
 };
 
-#define TCB_CANTRCVMORE 0x1
-#define TCB_CANTSENDMORE 0x2
+#define TCB_CANTRCVMORE 0x20
+#define TCB_CANTSENDMORE 0x40
 
-#define tpcantrcvmore(tp) (tp)->bufstate |= TCB_CANTRCVMORE
-#define tpcantsendmore(tp) (tp)->bufstate |= TCB_CANTSENDMORE
+#define TCB_PASSIVE 0x80
+
+#define tpcantrcvmore(tp) (tp)->miscflags |= TCB_CANTRCVMORE
+#define tpcantsendmore(tp) (tp)->miscflags |= TCB_CANTSENDMORE
+#define tpiscantrcv(tp) (((tp)->miscflags & TCB_CANTRCVMORE) != 0)
+#define tpiscantsend(tp) (((tp)->miscflags & TCB_CANTSENDMORE) != 0)
+#define tpmarktimeractive(tp, timer) (tp)->miscflags |= timer
+#define tpistimeractive(tp, timer) (((tp)->miscflags & timer) != 0)
+#define tpcleartimeractive(tp, timer) (tp)->miscflags &= ~timer
+#define tpmarkpassiveopen(tp) (tp)->miscflags |= TCB_PASSIVE
+#define tpispassiveopen(tp) (((tp)->miscflags & TCB_PASSIVE) != 0)
 
 #define REASSBMP_SIZE(tp) BITS_TO_BYTES((tp)->recvbuf.size)
 
 /* These estimates are used to allocate sackholes (see tcp_sack.c). */
-#define AVG_SACKHOLES 4 // per TCB
+#define AVG_SACKHOLES 3 // per TCB
 #define MAX_SACKHOLES 6 // per TCB
 #define SACKHOLE_POOL_SIZE AVG_SACKHOLES * NUMBSDTCPACTIVESOCKETS
 #define SACKHOLE_BMP_SIZE BITS_TO_BYTES(SACKHOLE_POOL_SIZE)
@@ -122,14 +131,11 @@ struct tcpcb_listen {
  * Organized for 16 byte cacheline efficiency.
  */
 struct tcpcb {
-    int	t_state;		/* state of this connection */
+    uint8_t	t_state;		/* state of this connection */
 	
 	/* Extra fields that I added. */
-	int index; /* Index/ID of this TCB */
-	uint32_t activetimers;
-	bool passiveopen; // Remembers if this TCB was initialized via a passive open or active open
-	
-	uint8_t bufstate;
+	uint8_t index; /* Index/ID of this TCB */
+	uint8_t miscflags;
 	
 	struct lbufhead sendbuf;
 	struct cbufhead recvbuf;
@@ -225,7 +231,7 @@ struct tcpcb {
 	u_long	snd_cwnd_prev;		/* cwnd prior to retransmit */
 	u_long	snd_ssthresh_prev;	/* ssthresh prior to retransmit */
 	tcp_seq	snd_recover_prev;	/* snd_recover prior to retransmit */
-	int	t_sndzerowin;		/* zero-window updates sent */
+//	int	t_sndzerowin;		/* zero-window updates sent */
 	u_int	t_badrxtwin;		/* window for retransmit recovery */
 	u_char	snd_limited;		/* segments limited transmitted */
 
@@ -250,9 +256,8 @@ struct tcpcb {
 //	int	t_rcvoopack;		/* out-of-order packets received */
 //	void	*t_toe;			/* TOE pcb pointer */
 	int	t_bytes_acked;		/* # bytes acked during current RTT */
-	struct cc_algo	*cc_algo;	/* congestion control algorithm */
-	struct cc_var	*ccv;		/* congestion control specific vars */
-	struct cc_var	ccvdata;	/* Actual data that ccv points to */
+//	struct cc_algo	*cc_algo;	/* congestion control algorithm */
+	struct cc_var	ccv[1];		/* congestion control specific vars */
 #if 0
 	struct osd	*osd;		/* storage for Khelp module data */
 #endif

@@ -3,7 +3,7 @@
 #include "driver.h"
 
 // Number of active sockets and number of passive sockets must be the same
-#define NUMSOCKETS 2
+#define NUMSOCKETS 3
 
 module TCPDriverP {
     provides interface Driver;
