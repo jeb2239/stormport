@@ -444,8 +444,10 @@ implementation{
   /********************* StdControl *********************/
   command error_t StdControl.start() {
     if (!running) {
+#ifndef NO_RPL
       post init();
       call RankControl.start();
+#endif
       running = TRUE;
     }
     return SUCCESS;

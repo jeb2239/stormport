@@ -268,9 +268,7 @@ module IPNeighborDiscoveryP {
 #endif
     memcpy(&pkt.ip6_hdr.ip6_dst, &ALL_ROUTERS_ADDR, 16);
     call IPAddress.getLLAddr(&pkt.ip6_hdr.ip6_src);
-#ifndef NO_RPL
     call IP_RS.send(&pkt);
-#endif
   }
 
   void send_ra (ieee154_laddr_t* ll_addr) {
@@ -348,9 +346,7 @@ module IPNeighborDiscoveryP {
     }
 
     call IPAddress.getLLAddr(&pkt.ip6_hdr.ip6_src);
-#ifndef NO_RPL
     call IP_RA.send(&pkt);
-#endif // NO_RPL
 #endif
   }
 
@@ -365,9 +361,7 @@ module IPNeighborDiscoveryP {
       call RSTimer.startOneShot(RTR_SOLICITATION_INTERVAL);
     }
 
-#ifndef NO_RPL
     post send_rs_task();
-#endif
   }
 
   event void IP_RS.recv(struct ip6_hdr *hdr,
@@ -422,9 +416,7 @@ module IPNeighborDiscoveryP {
     }
 
     // Send a unicast RA in response to the RS
-#ifndef NO_RPL
     send_ra(&sllao->ll_addr);
-#endif
   }
 
   event void IP_RA.recv(struct ip6_hdr *hdr,
