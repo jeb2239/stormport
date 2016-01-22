@@ -55,20 +55,7 @@ typedef struct
     void* r;
     uint8_t type;
     uint8_t arg0;
-    // SEND_READY, RECV_READY, and CONNECT_DONE don't require additional arguments
-    // CONNECTION_LOST requires a one-byte error code
-} __attribute__((packed)) tcp_lite_callback_t;
-
-typedef struct
-{
-    uint32_t addr;
-    void* r;
-    uint8_t type;
-    uint8_t arg0;
-    uint16_t src_port;
-    struct in6_addr src_address;
-    // ACCEPT_DONE requires a one-byte fd and an IP Address and a two byte port.
-} __attribute__((packed)) tcp_full_callback_t;
+} __attribute__((packed)) tcp_callback_t;
 
 typedef uint32_t syscall_rv_t;
 /*

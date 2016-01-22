@@ -16,16 +16,16 @@ module TCPDriverP {
     #include <bsdtcp/tcp_fsm.h>
     
     typedef struct {
-        tcp_lite_callback_t connectDone;
-        tcp_lite_callback_t sendDone;
-        tcp_lite_callback_t recvReady;
-        tcp_lite_callback_t connectionLost;
+        tcp_callback_t connectDone;
+        tcp_callback_t sendDone;
+        tcp_callback_t recvReady;
+        tcp_callback_t connectionLost;
         uint8_t readycbs;
     } active_socket_t;
     
     typedef struct {
         int acceptinginto;
-        tcp_full_callback_t acceptDone;
+        tcp_callback_t acceptDone;
         uint8_t readycbs;
     } passive_socket_t;
     
@@ -98,7 +98,7 @@ module TCPDriverP {
         }
     }
     
-    tcp_lite_callback_t* get_callback(uint8_t sock_idx, uint8_t cbt) {
+    tcp_callback_t* get_callback(uint8_t sock_idx, uint8_t cbt) {
         switch (cbt) {
         case TCP_CONNECT_DONE_CB:
             return &activesockets[sock_idx].connectDone;
@@ -109,7 +109,7 @@ module TCPDriverP {
         case TCP_CONNECTION_LOST_CB:
             return &activesockets[sock_idx].connectionLost;
         case TCP_ACCEPT_DONE_CB:
-            return (tcp_lite_callback_t*) &passivesockets[sock_idx].acceptDone;
+            return &passivesockets[sock_idx].acceptDone;
         default:
             return NULL;
         }
@@ -118,7 +118,7 @@ module TCPDriverP {
     command driver_callback_t Driver.peek_callback() {
         uint8_t start_idx = socket_idx;
         uint8_t start_cb_type = cb_type;
-        tcp_lite_callback_t* toconsider;
+        tcp_callback_t* toconsider;
         do {
             if ((IS_PASSIVE_CB(cb_type) && (passivesockets[socket_idx].readycbs & cb_type)) ||
                 (!IS_PASSIVE_CB(cb_type) && (activesockets[socket_idx].readycbs & cb_type))) {
@@ -147,8 +147,6 @@ module TCPDriverP {
     
     event void BSDTCPPassiveSocket.acceptDone[uint8_t pi](struct sockaddr_in6* addr, int asockid) {
         passivesockets[pi].acceptDone.arg0 = (uint8_t) passivesockets[pi].acceptinginto;
-        memcpy(&passivesockets[pi].acceptDone.src_address, &addr->sin6_addr, sizeof(struct in6_addr));
-        passivesockets[pi].acceptDone.src_port = ntohs(addr->sin6_port);
         passivesockets[pi].readycbs |= TCP_ACCEPT_DONE_CB;
         passivesockets[pi].acceptinginto = -1;
         printf("Accepted connection!\n");
@@ -203,6 +201,11 @@ module TCPDriverP {
     
     default command int BSDTCPActiveSocket.getState[uint8_t aundef]() {
         return TCPS_CLOSED; // BE CAREFUL
+    }
+    
+    default command void BSDTCPActiveSocket.getPeerInfo[uint8_t aundef](struct in6_addr** addr, uint16_t** port) {
+    	*addr = NULL; // BE CAREFUL
+    	*port = NULL;
     }
     
     default command error_t BSDTCPActiveSocket.connect[uint8_t aundef](struct sockaddr_in6* addr, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp) {
@@ -315,7 +318,9 @@ module TCPDriverP {
         int state;
         size_t length;
         uint32_t svc_id;
-        tcp_lite_callback_t* tostore;
+        struct in6_addr* addrptr;
+        uint16_t* portptr;
+        tcp_callback_t* tostore;
         syscall_rv_t rv = (syscall_rv_t) EBADF;
         fd = decode_fd(arg0, &passive); // most syscalls need this info
         svc_id = number & 0xFF;
@@ -439,7 +444,7 @@ module TCPDriverP {
                 if (fd < 0 || !passive) {
                     break;
                 }
-                tostore = (tcp_lite_callback_t*) &passivesockets[fd].acceptDone;
+                tostore = &passivesockets[fd].acceptDone;
             setcb:
                 tostore->addr = arg1;
                 tostore->r = (void*) arg2;
@@ -458,6 +463,15 @@ module TCPDriverP {
                 state = call BSDTCPActiveSocket.getState[fd]();
                 rv = (syscall_rv_t) (state == TCPS_TIME_WAIT || state == TCPS_CLOSE_WAIT || state == TCPS_LAST_ACK || state == TCPS_CLOSING);
                 break;
+            case 0x11: // peerinfo(fd, addr, port)
+            	if (fd < 0 || passive) {
+            		break;
+            	}
+            	call BSDTCPActiveSocket.getPeerInfo[fd](&addrptr, &portptr);
+            	inet_ntop6(addrptr, (char*) arg1, (int) arg2);
+            	*((uint16_t*) argx[0]) = ntohs(*portptr);
+            	rv = (syscall_rv_t) 0;
+            	break;
             default:
                 printf("Doing nothing\n");
                 break;

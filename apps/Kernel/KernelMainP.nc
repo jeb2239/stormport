@@ -421,23 +421,11 @@ implementation
                 //check for TCP callbacks
                 cb = call TCP_Driver.peek_callback();
                 if (cb != NULL) {
-                    tcp_lite_callback_t* c = (tcp_lite_callback_t*) cb;
-                    tcp_full_callback_t* cf;
-                    char v6addr[40];
-                    switch (c->type) {
-                        case TCP_CONNECT_DONE_CB:
-                            __inject_function1((void*) c->addr, c->r);
-                            break;
-                        case TCP_SEND_DONE_CB:
-                        case TCP_RECV_READY_CB:
-                        case TCP_CONNECTION_LOST_CB:
-                            __inject_function2((void*) c->addr, c->r, (uint32_t) c->arg0);
-                            break;
-                        case TCP_ACCEPT_DONE_CB:
-                            cf = (tcp_full_callback_t*) cb;
-                            inet_ntop6(&cf->src_address, v6addr, 40);
-                            __inject_function3((void*) cf->addr, cf->r, (((uint32_t) cf->arg0) << 16) | ((uint32_t) cf->src_port), (uint32_t) v6addr);
-                            break;
+                    tcp_callback_t* c = (tcp_callback_t*) cb;
+                    if (c->type == TCP_CONNECT_DONE_CB) {
+                        __inject_function1((void*) c->addr, c->r);
+                    } else {
+                        __inject_function2((void*) c->addr, c->r, (uint32_t) c->arg0);
                     }
                     procstate = procstate_runnable;
                     __syscall(KABI_RESUME_PROCESS);

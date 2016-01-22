@@ -3,6 +3,7 @@
 interface BSDTCPActiveSocket {
     command int getID();
     command int getState();
+    command void getPeerInfo(struct in6_addr** addr, uint16_t** port);
 
     command error_t bind(uint16_t port);
     

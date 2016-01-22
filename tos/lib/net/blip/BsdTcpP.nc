@@ -205,6 +205,11 @@ module BsdTcpP {
         return tcbs[asockid].t_state;
     }
     
+    command void BSDTCPActiveSocket.getPeerInfo[uint8_t asockid](struct in6_addr** addr, uint16_t** port) {
+    	*addr = &tcbs[asockid].faddr;
+    	*port = &tcbs[asockid].fport;
+    }
+    
     /* PORT is in network-byte order. */
     bool portisfree(uint16_t port) {
         int i;
