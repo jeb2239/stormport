@@ -43,6 +43,7 @@ generic module RPLDAORoutingEngineP() {
   provides {
     interface RPLDAORoutingEngine as RPLDAORouteInfo;
     interface StdControl;
+    interface RplStatistics <rpl_dao_statistics_t>
   }
   uses {
     interface Timer<TMilli> as DelayDAOTimer;
@@ -83,6 +84,9 @@ generic module RPLDAORoutingEngineP() {
   bool m_running = FALSE;
 
   uint32_t count = 0;
+
+  rpl_dao_statistics_t stats;
+  memset(stats, 0, sizeof(rpl_dao_statistics_t);
 
   task void initDAO();
 
@@ -151,6 +155,7 @@ generic module RPLDAORoutingEngineP() {
 #endif
       }
     }
+    stats.dao_send_count++;
   }
 
   command error_t RPLDAORouteInfo.startDAO() {
@@ -304,6 +309,8 @@ generic module RPLDAORoutingEngineP() {
     route_key_t new_key = ROUTE_INVAL_KEY;
 
     struct in6_addr target_prefix;
+
+    stats.dao_recv_count++;
 
     if (!m_running) return;
 
@@ -459,4 +466,17 @@ generic module RPLDAORoutingEngineP() {
   }
 
   event void IPAddress.changed(bool global_valid) {}
+
+  /* 
+   * RplStatistics inteface
+   */
+  command void RplStatistics.get(struct rpl_dao_statistics *statistics) {
+      if (statistics != NULL) {
+          memcpy(stats, statistics, sizeof(rpl_dao_statistics_t));
+      }
+  }
+
+  command void RplStatistics.clear() {
+      memset(stats, 0, sizeof(rpl_dao_statistics_t));
+  }
 }

@@ -47,6 +47,7 @@ generic module RPLRoutingEngineP() {
     interface RootControl;
     interface StdControl;
     interface RPLRoutingEngine as RPLRouteInfo;
+    interface RplStatistics <rpl_statistics_t>;
   }
   uses {
     interface IP as IP_DIO;     /* filtered DIO messages from the rank engine */
@@ -112,6 +113,9 @@ implementation{
   struct in6_addr ROOT_ADDR;
   struct in6_addr MULTICAST_ADDR;
   struct in6_addr UNICAST_DIO_ADDR;
+
+  rpl_statistics_t stats;
+  memset(&stats, 0, sizeof(rpl_statistics_t));
 
   /* Define Functions and Tasks */
   void resetTrickleTime();
@@ -270,6 +274,8 @@ implementation{
     call IPAddress.getLLAddr(&pkt.ip6_hdr.ip6_src);
 
     call IP_DIO.send(&pkt);
+
+    stats.dio_sent_count++;
   }
 
   task void sendDISTask() {
@@ -299,6 +305,8 @@ implementation{
     call IPAddress.getLLAddr(&pkt.ip6_hdr.ip6_src);
 
     call IP_DIS.send(&pkt);
+    
+    stats.dis_sent_count++;
   }
 
   void inconsistencyDetected() {
@@ -499,6 +507,8 @@ implementation{
    */
   event void IP_DIS.recv(struct ip6_hdr *iph, void *payload,
                          size_t len, struct ip6_metadata *meta) {
+    stats.dis_recv_count++;
+    
     if (!running) return;
     if (I_AM_LEAF) return;
 
@@ -532,6 +542,8 @@ implementation{
 
   event void IP_DIO.recv(struct ip6_hdr *iph, void *payload,
                          size_t len, struct ip6_metadata *meta) {
+    stats.dio_recv_count++;
+    
     struct dio_base_t *dio = (struct dio_base_t *)payload;
     if (!running) return;
 
@@ -636,5 +648,18 @@ implementation{
   }
 
   event void IPAddress.changed(bool global_valid) {}
+
+  /*
+   * RplStatistics interface
+   */
+  command void RplStatistics.get(rpl_statistics_t *statistics) {
+      if (statistics != NULL) {
+        memcpy(&stats, statistics, sizeof(rpl_statistics_t));
+      }
+  }
+
+  command void RplStatistics.clear() {
+      memset(&stats, 0, sizeof(rpl_statistics_t));
+  }
 
 }
