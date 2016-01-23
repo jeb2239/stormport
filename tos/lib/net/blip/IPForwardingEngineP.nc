@@ -30,6 +30,7 @@ module IPForwardingEngineP {
     interface IPPacket;
     interface Pool<struct in6_iid>;
     interface FlashAttr;
+    interface NeighborBlacklist;
 
 #ifdef PRINTFUART_ENABLED
     interface Timer<TMilli> as PrintTimer;

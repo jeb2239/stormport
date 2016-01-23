@@ -35,6 +35,7 @@ configuration IPStackC {
     interface NeighborDiscovery;
     interface ForwardingTableEvents;
     interface ForwardingEvents[uint8_t ifindex];
+    interface NeighborBlacklist;
   }
   uses {
     /* provided to stack components to turn themselves on and off */
@@ -53,6 +54,10 @@ configuration IPStackC {
   IPStackControlP.RoutingControl = RoutingControl;
   IPStackControlP.SubSplitControl -> IPDispatchC;
   IPStackControlP.NeighborDiscoveryControl -> NdC.StdControl;
+
+  components NeighborBlacklistP;
+  FwdP.NeighborBlacklist -> NeighborBlacklistP;
+  NeighborBlacklist = NeighborBlacklistP;
 
   NeighborDiscovery = NdC.NeighborDiscovery;
 

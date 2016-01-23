@@ -8,5 +8,6 @@ implementation
     components IPStackC;
     StormRoutingTableP.ForwardingTable -> IPStackC;
     StormRoutingTableP.NeighborDiscovery -> IPStackC;
+    StormRoutingTableP.NeighborBlacklist -> IPStackC;
     Driver = StormRoutingTableP;
 }

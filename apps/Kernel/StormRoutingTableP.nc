@@ -8,6 +8,7 @@ module StormRoutingTableP
     provides interface Driver;
     uses interface ForwardingTable;
     uses interface NeighborDiscovery;
+    uses interface NeighborBlacklist;
 }
 implementation
 {
@@ -172,6 +173,16 @@ implementation
                     (*((int *)arg0))++;
                     pack_routing_table(arg1, i*35, table+i);
                 }
+            }
+        }
+
+        case 0x06: //ignore_neighbor(address)
+        {
+            error_t err = call NeighborBlacklist.ignoreAddrFromString((char*)arg0);
+            if (err == SUCCESS) {
+                return 0;
+            } else {
+                return -1;
             }
         }
 
