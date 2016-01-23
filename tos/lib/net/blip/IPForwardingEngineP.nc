@@ -448,6 +448,7 @@ module IPForwardingEngineP {
       }
     }
     printf("\n");
+    call NeighborBlacklist.listIgnored();
     //printfflush();
     #endif
   }
