@@ -48,6 +48,7 @@
 module ICMPCoreP {
   provides {
     interface IP as ICMP_IP[uint8_t type];
+    interface BlipStatistics<icmp_statistics_t>;
   }
   uses {
     interface IP;
@@ -55,6 +56,9 @@ module ICMPCoreP {
     interface Leds;
   }
 } implementation {
+
+  icmp_statistics_t stats;
+  memset(stats, 0, sizeof(icmp_statistics_t);
   
   event void IP.recv(struct ip6_hdr *iph, 
                      void *packet, 
@@ -102,6 +106,24 @@ module ICMPCoreP {
     default:
       signal ICMP_IP.recv[req->type](iph, packet, len, meta);
     }
+    
+    switch (req->type) {
+      case ICMP_TYPE_ROUTER_SOL:
+        stats.sol_rx++;
+        break;
+
+      case ICMP_TYPE_ROUTER_ADV:
+        stats.adv_rx++;
+        break;
+
+      case ICMP_TYPE_ECHO_REQUEST:
+        stats.echo_rx++;
+        break;
+
+      default:
+        break;
+    }
+
   }
 
   command error_t ICMP_IP.send[uint8_t type](struct ip6_packet *pkt) {
@@ -111,11 +133,43 @@ module ICMPCoreP {
       req->cksum = 0;
       req->cksum = htons(msg_cksum(&pkt->ip6_hdr, pkt->ip6_data, IANA_ICMP));
     }
-    return call IP.send(pkt);
+    error_t err = call IP.send(pkt);
+
+    switch (type) {
+      case ICMP_TYPE_ROUTER_SOL:
+        stats.sol_tx++;
+        break;
+
+      case ICMP_TYPE_ROUTER_ADV:
+        stats.adv_tx++;
+        break;
+
+      case ICMP_TYPE_ECHO_REPLY:
+        stats.echo_tx++;
+        break;
+
+      default:
+        break;
+    }
+
+    return err;
   }
 
   event void IPAddress.changed(bool valid) {}
 
   default event void ICMP_IP.recv[uint8_t type](struct ip6_hdr *iph, void *payload, 
                                                 size_t len, struct ip6_metadata *meta) {}
+
+  /* 
+   * RplStatistics inteface
+   */
+  command void BlipStatistics.get(struct icmp_statistics_t *statistics) {
+    if (statistics != NULL) {
+      memcpy(stats, statistics, sizeof(icmp_statistics_t));
+    }
+  }
+
+  command void BlipStatistics.clear() {
+    memset(stats, 0, sizeof(icmp_statistics_t));
+  }
 }
