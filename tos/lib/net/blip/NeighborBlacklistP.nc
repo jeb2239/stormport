@@ -80,6 +80,10 @@ module NeighborBlacklistP {
     command void NeighborBlacklist.listIgnored() {
         int i;
         struct blacklist_entry *entry;
+        if (!blacklist_table[i].valid) { 
+            printf("\nIgnore list empty\n");
+            return; 
+        }
         printf("\n\nIgnoring following neighbors:\n");
         for (i = 0; i < ROUTE_TABLE_SZ; i++) {
             entry = &blacklist_table[i];
@@ -103,12 +107,15 @@ module NeighborBlacklistP {
     command bool NeighborBlacklist.ignored(struct in6_addr *address) {
         int i;
         struct blacklist_entry *entry;
+        // fail early
+        if (!blacklist_table[0].valid) return FALSE;
+
         for (i = 0; i < ROUTE_TABLE_SZ; i++) {
             entry = &blacklist_table[i];
             if (entry->valid &&
-                (memcmp(&entry->address.s6_addr32[0], &address->s6_addr32[0], 4) == 0) &&
-                (memcmp(&entry->address.s6_addr32[1], &address->s6_addr32[1], 4) == 0)) {
-                printf("ignored\n");
+                (memcmp(&entry->address.s6_addr32[2], &address->s6_addr32[2], 4) == 0) &&
+                (memcmp(&entry->address.s6_addr32[3], &address->s6_addr32[3], 4) == 0)) {
+                return TRUE;
             }
         }
         return FALSE;

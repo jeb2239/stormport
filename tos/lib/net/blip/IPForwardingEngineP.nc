@@ -125,6 +125,12 @@ module IPForwardingEngineP {
                                                uint8_t ifindex) {
     struct route_entry *entry;
     int i;
+    if (call NeighborBlacklist.ignored(next_hop)) {
+        printf("IGNORING addRoute to ");
+        printf_in6addr(next_hop);
+        printf("\n");
+        return FAIL;
+    }
 #ifndef BLIP_STFU
     printf("adding route with length %d on if %d\n", prefix_len_bits, ifindex);
 #endif
@@ -328,7 +334,10 @@ module IPForwardingEngineP {
 
     if (call IPAddress.isLocalAddress(&iph->ip6_dst)) {
       /* local delivery */
-      signal IP.recv(iph, payload, len, meta);
+      // check neighbor blacklist
+      if (!call NeighborBlacklist.ignored(&iph->ip6_src)) {
+          signal IP.recv(iph, payload, len, meta);
+      }
     } else {
       /* forwarding */
       uint8_t nxt_hdr = IPV6_ROUTING;
