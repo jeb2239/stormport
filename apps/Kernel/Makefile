@@ -42,8 +42,8 @@ PFLAGS += -DIN6_PREFIX=\"2001:470:83ae:2::\"
 ################################################################################
 
 # Configure the Neighbor Discovery mechanism
-PFLAGS += -DBLIP_SEND_ROUTER_SOLICITATIONS=0
-PFLAGS += -DBLIP_SEND_ROUTER_ADVERTISEMENTS=0
+PFLAGS += -DBLIP_SEND_ROUTER_SOLICITATIONS=1
+PFLAGS += -DBLIP_SEND_ROUTER_ADVERTISEMENTS=1
 
 # Configure the number of times BLIP tries to send a packet and how long it
 # waits between attempts
