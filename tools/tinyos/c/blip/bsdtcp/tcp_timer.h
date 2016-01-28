@@ -152,23 +152,22 @@ void tcp_cancel_timers(struct tcpcb* tp);
 		(tv) = (tvmax); \
 } while(0)
 
-int	tcp_syn_backoff[TCP_MAXRXTSHIFT + 1] =
+static const int	tcp_syn_backoff[TCP_MAXRXTSHIFT + 1] =
     { 1, 1, 1, 1, 1, 2, 4, 8, 16, 32, 64, 64, 64 };
 
-int	tcp_backoff[TCP_MAXRXTSHIFT + 1] =
+static const int	tcp_backoff[TCP_MAXRXTSHIFT + 1] =
     { 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 512, 512, 512 };
 
-static int tcp_totbackoff = 2559;	/* sum of tcp_backoff[] */
+static const int tcp_totbackoff = 2559;	/* sum of tcp_backoff[] */
 
-/* Copied from below. */
-
-#define	TP_KEEPINIT(tp)	((tp)->t_keepinit ? (tp)->t_keepinit : tcp_keepinit)
-#define	TP_KEEPIDLE(tp)	((tp)->t_keepidle ? (tp)->t_keepidle : tcp_keepidle)
-#define	TP_KEEPINTVL(tp) ((tp)->t_keepintvl ? (tp)->t_keepintvl : tcp_keepintvl)
-#define	TP_KEEPCNT(tp)	((tp)->t_keepcnt ? (tp)->t_keepcnt : tcp_keepcnt)
+/* Copied from below, with modifications. */
+#define	TP_KEEPINIT(tp)	(/*(tp)->t_keepinit ? (tp)->t_keepinit :*/ tcp_keepinit)
+#define	TP_KEEPIDLE(tp)	(/*(tp)->t_keepidle ? (tp)->t_keepidle :*/ tcp_keepidle)
+#define	TP_KEEPINTVL(tp) (/*(tp)->t_keepintvl ? (tp)->t_keepintvl :*/ tcp_keepintvl)
+#define	TP_KEEPCNT(tp)	(/*(tp)->t_keepcnt ? (tp)->t_keepcnt :*/ tcp_keepcnt)
 #define	TP_MAXIDLE(tp)	(TP_KEEPCNT(tp) * TP_KEEPINTVL(tp))
 
-extern int tcp_keepcnt;			/* number of keepalives */
+//extern int tcp_keepcnt;			/* number of keepalives */
 
 // MOVED NECESSARY EXTERN DECLARATIONS TO TCP_SUBR.C
 #if 0 // I'M IMPLEMENTING TIMERS MY OWN WAY IN TINYOS, SO I DON'T NEED THIS

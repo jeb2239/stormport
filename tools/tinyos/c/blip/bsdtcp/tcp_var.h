@@ -119,8 +119,8 @@ struct tcpcb_listen {
 #define REASSBMP_SIZE(tp) BITS_TO_BYTES((tp)->recvbuf.size)
 
 /* These estimates are used to allocate sackholes (see tcp_sack.c). */
-#define AVG_SACKHOLES 3 // per TCB
-#define MAX_SACKHOLES 6 // per TCB
+#define AVG_SACKHOLES 2 // per TCB
+#define MAX_SACKHOLES 5 // per TCB
 #define SACKHOLE_POOL_SIZE AVG_SACKHOLES * NUMBSDTCPACTIVESOCKETS
 #define SACKHOLE_BMP_SIZE BITS_TO_BYTES(SACKHOLE_POOL_SIZE)
 
@@ -261,17 +261,18 @@ struct tcpcb {
 #if 0
 	struct osd	*osd;		/* storage for Khelp module data */
 #endif
+#if 0 // Just use the default values for the KEEP constants (see tcp_timer.h)
 	u_int	t_keepinit;		/* time to establish connection */
 	u_int	t_keepidle;		/* time before keepalive probes begin */
 	u_int	t_keepintvl;		/* interval between keepalives */
 	u_int	t_keepcnt;		/* number of keepalives before close */
-
+#endif
 #if 0 // Don't support TCP Segment Offloading
 	u_int	t_tsomax;		/* TSO total burst length limit in bytes */
 	u_int	t_tsomaxsegcount;	/* TSO maximum segment count */
 	u_int	t_tsomaxsegsize;	/* TSO maximum segment size in bytes */
 #endif
-	u_int	t_pmtud_saved_maxopd;	/* pre-blackhole MSS */
+//	u_int	t_pmtud_saved_maxopd;	/* pre-blackhole MSS */
 	u_int	t_flags2;		/* More tcpcb flags storage */
 
 //	uint32_t t_ispare[8];		/* 5 UTO, 3 TBD */

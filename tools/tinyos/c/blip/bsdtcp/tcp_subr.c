@@ -56,6 +56,8 @@ int tcp_finwait2_timeout;
 #endif
 int tcp_rexmit_min;
 
+#define MSS_6LOWPAN ((FRAMES_PER_SEG * FRAMECAP_6LOWPAN) - COMPRESSED_IP6HDR_SIZE - sizeof(struct tcphdr))
+
 enum tcp_subr_consts {
     tcp_delacktime = TCPTV_DELACK,
 	tcp_keepinit = TCPTV_KEEP_INIT,
@@ -67,9 +69,9 @@ enum tcp_subr_consts {
 	tcp_finwait2_timeout = TCPTV_FINWAIT2_TIMEOUT,
 	
     V_tcp_do_rfc1323 = 1,
-    V_tcp_v6mssdflt = FRAGLIMIT_6LOWPAN - sizeof(struct ip6_hdr) - sizeof(struct tcphdr),
+    V_tcp_v6mssdflt = MSS_6LOWPAN,
     /* Normally, this is used to prevent DoS attacks by sending tiny MSS values in the options. */
-    V_tcp_minmss = 70, // Barely enough for TCP header and all options. Default is 216.
+    V_tcp_minmss = TCP_MAXOLEN + 1, // Must have enough space for TCP options, and one more byte for data. Default is 216.
     V_tcp_do_sack = 1
 };
 
@@ -829,8 +831,8 @@ tcp_drop(struct tcpcb *tp, int errno)
 //		TCPSTAT_INC(tcps_drops);
 	}// else
 //		TCPSTAT_INC(tcps_conndrops);
-//	if (errno == ETIMEDOUT && tp->t_softerror)
-//		errno = tp->t_softerror;
+	if (errno == ETIMEDOUT && tp->t_softerror)
+		errno = tp->t_softerror;
 //	so->so_error = errno;
 //	return (tcp_close(tp));
     tp = tcp_close(tp);
@@ -851,7 +853,7 @@ tcp_maxmtu6(/*struct in_conninfo *inc,*/struct tcpcb* tp, struct tcp_ifcap *cap)
 	
 	KASSERT (tp != NULL, ("tcp_maxmtu6 with NULL tcpcb pointer"));
 	if (!IN6_IS_ADDR_UNSPECIFIED(&tp->faddr)) {
-		maxmtu = FRAGLIMIT_6LOWPAN;
+		maxmtu = FRAMES_PER_SEG * FRAMECAP_6LOWPAN;
 	}
 	
 	return (maxmtu);
