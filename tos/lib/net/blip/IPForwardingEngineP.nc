@@ -143,7 +143,7 @@ module IPForwardingEngineP {
         return ROUTE_INVAL_KEY;
     }
     entry = call ForwardingTable.lookupRoute(prefix, prefix_len_bits);
-#ifdef RPL_SINGLE_HOP
+//#ifdef RPL_SINGLE_HOP
     /**
      * In single-hop mode, we have already statically set the single hop route
      * in IPNeighborDiscoveryP.  Here, we check to see if we already have a
@@ -151,13 +151,13 @@ module IPForwardingEngineP {
      * already exists, then we do not overwrite it. Else, the method continues
      * as usual -- Gabe
      */
-    if (entry != NULL && memcmp(&entry->prefix, next_hop, sizeof(struct in6_addr)) != 0)  {
-#ifndef BLIP_STFU
-        printf("\033[31;1merror bc already have route for that prefix\n\033[0m");
-#endif
-        return ROUTE_INVAL_KEY;
-    }
-#endif
+//    if (entry != NULL && memcmp(&entry->prefix, next_hop, sizeof(struct in6_addr)) != 0)  {
+//#ifndef BLIP_STFU
+//        printf("\033[31;1merror bc already have route for that prefix\n\033[0m");
+//#endif
+//        return ROUTE_INVAL_KEY;
+//    }
+//#endif
     if (entry == NULL || entry->prefixlen != prefix_len_bits) {
       /* if there's no entry, or there's another entry but it has a
          different prefix length, we allocate a new slot in the
