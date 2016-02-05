@@ -101,7 +101,11 @@ module IPNeighborDiscoveryP {
 
     inet_pton6(IPV6_ADDR_ALL_ROUTERS, &ALL_ROUTERS_ADDR);
 
+#ifndef BORDER_ROUTER
+    // null out the prefix only if we aren't the border router
     memset(&prefix, 0, sizeof(struct in6_addr));
+#endif
+
 #ifdef RPL_SINGLE_HOP
     /**
      * In single-hop mode, we only want our mote to send/receive from a single

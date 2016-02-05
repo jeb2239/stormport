@@ -190,12 +190,12 @@ implementation
         ln = snprintf(vbuf, 80, "Booting kernel %d.%d.%d.%d (%s)\n",VER_MAJOR, VER_MINOR, VER_SUBMINOR, VER_BUILD, GITCOMMIT);
         storm_write_payload(vbuf, ln);
 
-#ifdef RPL_SINGLE_HOP_ROOT
+#ifdef BORDER_ROUTER
         call Timer.startPeriodic(320000);
 #endif
 
 #ifndef NO_RPL
-#ifdef RPL_SINGLE_HOP_ROOT
+#ifdef BORDER_ROUTER
         call RootControl.setRoot();
 #else
         call RootControl.unsetRoot();
