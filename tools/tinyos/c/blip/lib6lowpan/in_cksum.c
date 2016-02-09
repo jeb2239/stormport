@@ -201,10 +201,10 @@ uint16_t msg_cksum(const struct ip6_hdr *iph,
   struct ip_iovec cksum_vec[3];
   uint32_t hdr[2];
 
-  cksum_vec[0].iov_base = (uint8_t *)(iph->ip6_src.s6_addr);
+  cksum_vec[0].iov_base = (uint8_t *)(&iph->ip6_src.s6_addr);
   cksum_vec[0].iov_len = 16;
   cksum_vec[0].iov_next = &cksum_vec[1];
-  cksum_vec[1].iov_base = (uint8_t *)(iph->ip6_dst.s6_addr);
+  cksum_vec[1].iov_base = (uint8_t *)(&iph->ip6_dst.s6_addr);
   cksum_vec[1].iov_len = 16;
   cksum_vec[1].iov_next = &cksum_vec[2];
   cksum_vec[2].iov_base = (uint8_t *)hdr;
@@ -212,6 +212,7 @@ uint16_t msg_cksum(const struct ip6_hdr *iph,
   cksum_vec[2].iov_next = data;
   hdr[0] = htonl(iov_len(data));
   hdr[1] = htonl(nxt_hdr);
+
 
 
   return in_cksum(cksum_vec);

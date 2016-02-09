@@ -11,6 +11,28 @@
 #include "iovec.h"
 #include "ieee154_header.h"
 
+void lowpan_recalc_udpchksum(struct lowpan_reconstruct *recon) {
+    struct ip6_hdr *hdr = (struct ip6_hdr *) recon->r_buf;
+
+    /* Right now only handle the only header being UDP */
+    if (hdr->ip6_nxt == IANA_UDP) {
+      struct ip_iovec v[2];
+      struct udp_hdr *udph;
+
+      udph = (struct udp_hdr *) recon->r_transport_header;
+      udph->chksum = 0;
+
+      v[0].iov_base = (uint8_t *) udph;
+      v[0].iov_len  = sizeof(struct udp_hdr);
+      v[0].iov_next = v+1;
+      v[1].iov_base = (uint8_t*) (udph + 1);
+      v[1].iov_len  = ntohs(*recon->r_app_len) - sizeof(struct udp_hdr);
+      v[1].iov_next = NULL;
+      udph->chksum = htons(msg_cksum(hdr, v, IANA_UDP));
+    }
+}
+
+
 int lowpan_recon_start(struct ieee154_frame_addr *frame_addr,
                        struct lowpan_reconstruct *recon,
                        uint8_t *pkt,
@@ -97,26 +119,7 @@ int lowpan_recon_start(struct ieee154_frame_addr *frame_addr,
    * at the packet's destination.
    */
   if (recalculate_checksum) {
-    struct ip6_hdr *hdr = (struct ip6_hdr *) recon->r_buf;
-
-    /* Right now only handle the only header being UDP */
-    if (hdr->ip6_nxt == IANA_UDP) {
-      struct ip_iovec v[2];
-      struct udp_hdr *udph;
-
-      udph = (struct udp_hdr *) recon->r_transport_header;
-      udph->chksum = 0;
-
-      v[0].iov_base = (uint8_t *) udph;
-      v[0].iov_len  = sizeof(struct udp_hdr);
-      v[0].iov_next = v+1;
-      v[1].iov_base = (uint8_t*) (udph + 1);
-      v[1].iov_len  = ntohs(*recon->r_app_len) - sizeof(struct udp_hdr);
-      v[1].iov_next = NULL;
-
-      udph->chksum = htons(msg_cksum(hdr, v, IANA_UDP));
-    }
-
+    lowpan_recalc_udpchksum(recon);
   }
 
   /* done, updated all the fields */
@@ -147,6 +150,7 @@ int lowpan_recon_add(struct lowpan_reconstruct *recon,
   memcpy(recon->r_buf + recon->r_bytes_rcvd, buf, len);
   recon->r_bytes_rcvd += len;
 
+  lowpan_recalc_udpchksum(recon);
   return 0;
 }
 

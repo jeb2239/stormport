@@ -184,6 +184,8 @@ int lowpan_recon_start(struct ieee154_frame_addr *frame_addr,
 int lowpan_recon_add(struct lowpan_reconstruct *recon,
                      uint8_t *pkt, size_t len);
 
+void lowpan_recalc_udpchksum(struct lowpan_reconstruct *recon);
+
 enum {
   T_FAILED1 = 0,
   T_FAILED2 = 1,
