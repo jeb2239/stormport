@@ -463,7 +463,7 @@ module TCPDriverP {
                 state = call BSDTCPActiveSocket.getState[fd]();
                 rv = (syscall_rv_t) (state == TCPS_TIME_WAIT || state == TCPS_CLOSE_WAIT || state == TCPS_LAST_ACK || state == TCPS_CLOSING);
                 break;
-            case 0x11: // peerinfo(fd, addr, port)
+            case 0x11: // peerinfo(fd, addr, len, port)
             	if (fd < 0 || passive) {
             		break;
             	}
