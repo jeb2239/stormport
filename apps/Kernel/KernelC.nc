@@ -120,6 +120,7 @@ implementation
     components AESDriverC;
     KernelMainP.AES_Driver -> AESDriverC;
     components FlashDriverC;
+    FlashDriverC.FlashAttr -> FlashAttrC;
     KernelMainP.Flash_Driver -> FlashDriverC;
     components ScrufflesDriverC;
     KernelMainP.Scruffles_Driver -> ScrufflesDriverC;

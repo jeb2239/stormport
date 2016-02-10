@@ -7,6 +7,7 @@ module FlashDriverP
     }
     uses
     {
+        interface FlashAttr;
         interface FastSpiByte;
         interface HplSam4lSPIChannel;
         interface Resource;
@@ -164,6 +165,26 @@ implementation
                 operation = OP_ISBUSY;
                 spi_busy = 1;
                 call Resource.request();
+                return 0;
+            }
+            // Flash prefixes
+            case 0x05: // get_attribute(attr num, key_buf, val_buf, val_len)
+            {
+                uint8_t idx;
+                uint8_t *key;
+                char *val;
+                uint8_t val_len;
+                error_t e;
+
+                // attribute number
+                idx = (uint8_t) arg0;
+                key = (uint8_t*) arg1;
+                val = (char*) arg2;
+                e = call FlashAttr.getAttr(idx, key, val, (uint8_t*)argx[0]);
+                if (e != SUCCESS)
+                {
+                    return 1;
+                }
                 return 0;
             }
 

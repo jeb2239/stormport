@@ -1,6 +1,7 @@
 configuration FlashDriverC
 {
     provides interface Driver;
+    uses interface FlashAttr;
 }
 implementation
 {
@@ -15,6 +16,7 @@ implementation
     FlashDriverP.FastSpiByte -> Sam4lSPI0C;
     FlashDriverP.HplSam4lSPIChannel -> Sam4lSPI0C;
     FlashDriverP.Init <- RealMainP.SoftwareInit;
+    FlashDriverP.FlashAttr = FlashAttr;
     Driver = FlashDriverP.Driver;
 
    // components HplSam4lTWIMP;
