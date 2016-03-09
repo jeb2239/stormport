@@ -50,6 +50,8 @@ module IPProtocolsP {
     if (payload_off >= 0) {
       signal IP.recv[nxt_hdr](iph, ((uint8_t *)payload) + payload_off,
                               len - payload_off, meta);
+    } else {
+      printf("Discarding the packet!\n");
     }
   }
 

@@ -1,6 +1,8 @@
 #ifndef __DRIVER_H__
 #define __DRIVER_H__
 
+#include <lib6lowpan/ip.h>
+
 //TODO
 
 typedef void* driver_callback_t;
@@ -38,6 +40,22 @@ typedef struct
     uint32_t arg0;
     uint32_t arg1;
 } ble_callback_t;
+
+#define NUM_CB_TYPES 5
+#define TCP_CONNECT_DONE_CB 0x01
+#define TCP_SEND_DONE_CB 0x02
+#define TCP_RECV_READY_CB 0x04
+#define TCP_CONNECTION_LOST_CB 0x08
+#define TCP_ACCEPT_DONE_CB 0x10
+#define IS_PASSIVE_CB(cbt) ((cbt) == TCP_ACCEPT_DONE_CB)
+
+typedef struct
+{
+    uint32_t addr;
+    void* r;
+    uint8_t type;
+    uint8_t arg0;
+} __attribute__((packed)) tcp_callback_t;
 
 typedef uint32_t syscall_rv_t;
 /*
