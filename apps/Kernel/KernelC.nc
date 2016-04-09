@@ -65,6 +65,7 @@ implementation
 
     components UdpC, IPDispatchC;
     components RPLRoutingC;
+    components SERPRoutingC;
 
     components PlatformSerialC;
     KernelMainP.UartStream -> PlatformSerialC;

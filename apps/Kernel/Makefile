@@ -30,6 +30,9 @@ ifdef BORDER_ROUTER
 	PFLAGS += -DBLIP_SEND_ROUTER_ADVERTISEMENTS=1
 endif
 
+## New routing protocol test
+PFLAGS += -I$(TINYOS_ROOT_DIR)/tos/lib/net/serp
+
 # radio options
 # CFLAGS += -DCC2420_DEF_CHANNEL=26
 CFLAGS += -DRF230_DEF_CHANNEL=24

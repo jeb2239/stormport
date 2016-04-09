@@ -169,6 +169,7 @@ enum {
     ICMP_TYPE_NEIGHBOR_SOL          = 135,
     ICMP_TYPE_NEIGHBOR_ADV          = 136,
     ICMP_TYPE_RPL_CONTROL           = 155,
+    ICMP_TYPE_SERP_CONTROL          = 160, // first unassigned ICMP parameter number?
     ICMP_NEIGHBOR_HOPLIMIT          = 255,
 
     ICMP_CODE_HOPLIMIT_EXCEEDED     = 0,
