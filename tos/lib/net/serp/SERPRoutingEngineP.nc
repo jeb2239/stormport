@@ -65,8 +65,47 @@ module SERPRoutingEngineP {
                         void *packet,
                         size_t len,
                         struct ip6_metadata *meta) {
-  // TODO: implement this
-    printf("received an RA in SERP\n");
+
+    struct nd_router_advertisement_t* ra;
+    uint8_t* cur = (uint8_t*) packet;
+    uint8_t type;
+    uint8_t olen;
+
+    printf("received an RA in SERP from ");
+    printf_in6addr(&hdr->ip6_src);
+    printf("\n");
+
+    if (len < sizeof(struct nd_router_advertisement_t)) return;
+    ra = (struct nd_router_advertisement_t*) packet;
+
+    // skip the base of the packet
+    cur += sizeof(struct nd_router_advertisement_t);
+    len -= sizeof(struct nd_router_advertisement_t);
+
+    // Iterate through all of the SERP-specific options
+    while (TRUE) {
+      if (len < 2) break;
+      // Get the type byte of the first option
+      type = *cur;
+      olen = *(cur+1) << 3;
+
+      if (len < olen) return;
+      switch (type) {
+      case ND6_SERP_MESH_INFO:
+        {
+            struct nd_option_serp_mesh_info_t* meshinfo;
+            meshinfo = (struct nd_option_serp_mesh_info_t*) cur;
+            printf("Received a SERP Mesh Info message with pfx len: %d, power: %d and prefix ", meshinfo->prefix_length, meshinfo->powered);
+            printf_in6addr(&meshinfo->prefix);
+            printf("\n");
+            break;
+        }
+      default:
+        break;
+      }
+      cur += olen;
+      len -= olen;
+    }
   }
 
   /***** Send Router Advertisement *****/
@@ -82,7 +121,7 @@ module SERPRoutingEngineP {
 
 
     uint8_t sllao_len;
-    uint8_t data[120];
+    uint8_t data[100];
     uint8_t* cur = data;
     uint16_t length = 0;
 
@@ -110,10 +149,13 @@ module SERPRoutingEngineP {
 
     if (call NeighborDiscovery.havePrefix()) {
         struct nd_option_serp_mesh_info_t option;
+        option.type = ND6_SERP_MESH_INFO;
+        option.option_length = 3;
+        option.reserved = 0;
         // add prefix length
         option.prefix_length = call NeighborDiscovery.getPrefixLength();
         // add prefix
-        memcpy(&option.prefix, call NeighborDiscovery.getPrefix(), sizeof(struct in6_addr));
+        ip_memcpy((uint8_t*) &option.prefix, (uint8_t*)call NeighborDiscovery.getPrefix(), sizeof(struct in6_addr));
         // treat all nodes as powered for now
         // TODO: fix this!
         option.powered = SERP_MAINS_POWERED;
@@ -144,7 +186,7 @@ module SERPRoutingEngineP {
                         size_t len,
                         struct ip6_metadata *meta) {
     printf("received an RS in SERP from ");
-    printf_in6addr(&hdr->ip6_dst);
+    printf_in6addr(&hdr->ip6_src);
     printf("\n");
     memcpy(&unicast_ra_destination, &(hdr->ip6_src), sizeof(struct in6_addr));
 

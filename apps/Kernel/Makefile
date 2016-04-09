@@ -32,6 +32,7 @@ endif
 
 ## New routing protocol test
 PFLAGS += -I$(TINYOS_ROOT_DIR)/tos/lib/net/serp
+PFLAGS += -DSERP_ROUTING
 
 # radio options
 # CFLAGS += -DCC2420_DEF_CHANNEL=26

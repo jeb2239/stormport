@@ -419,8 +419,11 @@ module IPNeighborDiscoveryP {
                                     ROUTE_IFACE_154);
     }
 
+// SERP sends its own RAs, so we don't do this if we run SERP
+#ifndef SERP_ROUTING
     // Send a unicast RA in response to the RS
     send_ra(&sllao->ll_addr);
+#endif
   }
 
   event void IP_RA.recv(struct ip6_hdr *hdr,

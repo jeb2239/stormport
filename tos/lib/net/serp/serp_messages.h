@@ -16,8 +16,11 @@ typedef enum {
 // is unicast do a node petititioning to be part of
 // the mesh
 struct nd_option_serp_mesh_info_t {
+    uint8_t type;
+    uint8_t option_length;
     uint8_t prefix_length;
     serp_power_type powered;
+    uint32_t reserved;
     struct in6_addr prefix;
 };
 
