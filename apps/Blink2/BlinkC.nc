@@ -102,7 +102,7 @@ implementation
   uint8_t rxbuf [80];
   event void Timer0.fired()
   {
-
+    
     uint8_t txlen;
     trace("hello world\n");
     trace16(500);

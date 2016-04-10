@@ -46,14 +46,21 @@
  **/
 
 #include "Timer.h"
+#include "printf.h"
+#include <usarthardware.h>
+#include <stdint.h>
+
+
 
 module BlinkC @safe()
 {
   uses interface Timer<TMilli> as Timer0;
   uses interface Timer<TMilli> as Timer1;
   uses interface Timer<TMilli> as Timer2;
-  uses interface Leds;
+  uses interface GeneralIO as Led;
+  uses interface HplSam4lUSART as SpiHPL;
   uses interface Boot;
+  uses interface SpiPacket;
 }
 implementation
 {
@@ -62,24 +69,84 @@ implementation
     call Timer0.startPeriodic( 250 );
     call Timer1.startPeriodic( 500 );
     call Timer2.startPeriodic( 1000 );
+    call Led.makeOutput();
+    printf("Configuring SPI\n");
+    //Because you can have one usart present on multiple pins (like multiple TX pins)
+    //you need to speak to the HPL directly. Not sure what the best way to implement
+    //this is.
+    call SpiHPL.enableUSARTPin(USART2_TX_PC12);
+    call SpiHPL.enableUSARTPin(USART2_RX_PC11);
+    call SpiHPL.enableUSARTPin(USART2_CLK_PA18);
+    call SpiHPL.enableUSARTPin(USART2_RTS_PC07);
+    call SpiHPL.initSPIMaster();
+    call SpiHPL.setSPIMode(0,0);
+    call SpiHPL.setSPIBaudRate(20000);
+    call SpiHPL.enableTX();
+    call SpiHPL.enableRX();
+
   }
 
+  async event void SpiPacket.sendDone(uint8_t* txBuf, uint8_t* rxBuf, uint16_t len, error_t error)
+  {
+    printf("got: '%s'",rxBuf);
+  }
+  uint8_t txbuf [80];
+  uint8_t rxbuf [80];
+  volatile uint32_t count = 0;
+
+// addresses of registers
+  volatile uint32_t *DWT_CONTROL = (uint32_t *)0xE0001000;
+  volatile uint32_t *DWT_CYCCNT = (uint32_t *)0xE0001004; 
+  volatile uint32_t *DEMCR = (uint32_t *)0xE000EDFC; 
+
+  extern uint32_t __start_count()
+{
+
+
+// enable the use DWT
+*DEMCR = *DEMCR | 0x01000000;
+
+// Reset cycle counter
+*DWT_CYCCNT = 0; 
+
+// enable cycle counter
+*DWT_CONTROL = *DWT_CONTROL | 1 ; 
+
+}
+
+// some code here
+// .....
+
+extern uint32_t __end_count()
+{
+// number of cycles stored in count variable
+count = *DWT_CYCCNT;
+return count;
+}
+uint32_t a=0;
   event void Timer0.fired()
   {
-    dbg("BlinkC", "Timer 0 fired @ %s.\n", sim_time_string());
-    call Leds.led0Toggle();
+
+     __start_count(); //this interval is 4
+    //dbg("BlinkC", "Timer 0 fired @ %s.\n", sim_time_string());
+    //call Led.toggle();
+     call Led.toggle();
+     
+     a=__end_count(); 
+    
+    printf("%d\n",a);
   }
   
   event void Timer1.fired()
   {
     dbg("BlinkC", "Timer 1 fired @ %s \n", sim_time_string());
-    call Leds.led1Toggle();
+    call Led.toggle();
   }
   
   event void Timer2.fired()
   {
     dbg("BlinkC", "Timer 2 fired @ %s.\n", sim_time_string());
-    call Leds.led2Toggle();
+    call Led.toggle();
   }
 }
 

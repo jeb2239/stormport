@@ -53,17 +53,26 @@ configuration BlinkAppC
 }
 implementation
 {
-  components MainC, BlinkC, LedsC;
+  components MainC, BlinkC, HplSam4lIOC;
   components new TimerMilliC() as Timer0;
   components new TimerMilliC() as Timer1;
   components new TimerMilliC() as Timer2;
-
+  BlinkC.Led -> HplSam4lIOC.PC10;
 
   BlinkC -> MainC.Boot;
 
   BlinkC.Timer0 -> Timer0;
   BlinkC.Timer1 -> Timer1;
   BlinkC.Timer2 -> Timer2;
-  BlinkC.Leds -> LedsC;
+
+  //BlinkC.Leds -> LedsC;
+   components SerialPrintfC;
+
+  //SPI stuff
+  components new Sam4lUSART2C();
+  BlinkC.SpiPacket -> Sam4lUSART2C.SpiPacket;
+  BlinkC.SpiHPL -> Sam4lUSART2C;
+
+ 
 }
 
